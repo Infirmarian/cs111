@@ -2,7 +2,70 @@ NAME: Robert Geil
 EMAIL: rgeil@ucla.edu
 ID: 104916969
 
-Smoke Tests:
-    For the series of smoke tests, 
+Included Files:
+    - lab0.c
+        Source code file for the project
+    - Makefile
+        Makefile with options to create distribution (make dist), run checks (make check) and clean up (make clean)
+    - README
+        A description of the program
+    - smoke.sh
+        A series of tests to verify basic functionality
+    - backtrace.png
+        A screenshot of gdb output when a segmentation fault is caused
+    - breakpoint.png
+        A screenshot of gdb output when a breakpoint is created, and the memory contents before a segfault
 
-Documentation from www.gnu.org/software/libc/manual was used for this project
+Program Descriptions:
+    This program writes from an input to output, and can redirect input and output given arguments. To compile and make,
+    execute the command `make`. By default, the program reads from the standard input and writes to the standard output. 
+    Program arguments are described below
+    --input=filename
+        Redirect from the standard input to use the given file as input instead
+    --output=filename
+        Redirect from the standard output to use the given file as output instead
+    --segfault
+        Create a segmentation fault in the program, resulting in termination
+    --catch
+        Setup a catch signal to handle segmentation faults
+    --dump-core
+        Return segmentation faults to the default behaviour (eg remove the effects of a --catch flag)
+    
+    Some examples of valid usage
+        ./lab0
+        ./lab0 --input=file1.txt
+        ./lab0 --output=file1.txt
+        ./lab0 --segfault
+        ./lab0 --catch --segfault
+    
+    The return codes of the program conform to the following table
+        Success: 0
+        Bad argument: 1
+        Bad input: 2
+        Bad output: 3
+        Caught segfault: 4
+        Uncaught segfault: 139
+
+Smoke Tests:
+    For the series of smoke tests, basic functionality of the program was tested in the following categories:
+    - No options, checking from standard input to output, no redirection
+    - A single input file
+    - A single empty input file
+    - A single output file
+    - A single input and single output file
+    - Input and output as the same file
+    - A non-existant input file
+    - A read-restricted input file
+    - A write-restricted output file
+    - Bad arguments, in several combinations with valid arguments
+    - Only segfault as a flag
+    - Segfault, dump-core and catch in various combinations
+    - Segfault between a read and write
+    
+    For each of the test cases, the return code of the function was checked, and if the operation was inteneded to be
+    successful, the value of the output was compared to the input, to ensure that copying was correct. This series of tests
+    is incomplete, and a more universal set of tests would include more combinations of input and output arguments, this basic
+    smoke test shows the 
+
+Documentation from www.gnu.org/software/libc/manual was used for this project, including a 
+specific example at https://www.gnu.org/software/libc/manual/html_node/Getopt-Long-Option-Example.html#Getopt-Long-Option-Example

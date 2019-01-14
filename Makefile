@@ -9,9 +9,9 @@ all: lab0.c
 	$(CC) $(flags) -o $(exename) lab0.c
 check: lab0.c $(exename)
 	$(CC) $(flags) -o $(exename) lab0.c
-	./smoke.sh
+	./smoke.sh 2> /dev/null
 dist: lab0.c Makefile README smoke.sh
-	tar -zcf lab0-104916969.tar.gz lab0.c Makefile README smoke.sh
+	tar -zcf lab0-104916969.tar.gz lab0.c Makefile README smoke.sh backtrace.png breakpoint.png
 clean: 
 	$(RM) $(exename)
 	$(RM) lab0-104916969.tar.gz
