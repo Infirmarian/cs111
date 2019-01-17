@@ -1,9 +1,10 @@
 #General
 *.tar.gz
 *~
+.vscode/
 
 #lab0
 functions.sh
 lab0/lab0
 #Lab1
-simplesh
+simpsh
