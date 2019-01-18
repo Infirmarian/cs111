@@ -40,20 +40,34 @@ int get_argument_count(int argc, char** argv, int optind){
 }
 
 int execute_command(int argc, char** argv, int* optind){
+    (*optind)--;
     int count = get_argument_count(argc, argv, *optind);
     char* stored_arg = 0;
     if(*optind+count < argc){
-        stored_arg = malloc(sizeof(argv[*optind+count]));
-        strcpy(stored_arg, argv[*optind+count]);
+        stored_arg = argv[*optind+count];
         argv[*optind+count] = 0; //set to the null pointer
     }
     //TODO: Execute the command here
-    
+    pid_t pid;
+    pid = fork();
+    if(pid < 0){
+        fprintf(stderr, "Unable to fork to child process: %s", strerror(errno));
+        return 1;
+    }
+    if(pid)
+        printf("Parent\n");
+    else{
+        printf("I'm a child\n");
+        exit(execvp(argv[*optind+3], argv+*optind+4));
+    }
+    do{
+
+    }while(wait(&pid));
+
 
     //restore the value in argv
-    strcpy(argv[*optind+count], stored_arg);
-    free(stored_arg);
-    *optind = *optind + count -1;
+    argv[*optind+count] = stored_arg;
+    *optind = *optind + count;
     return 0;
 }
 
@@ -75,16 +89,13 @@ int main(int argc, char** argv){
             break;
         switch(c){
             case 'r':
-                printf("rdonly passed with arg %s\n", optarg);
                 e_acc += open_check(optarg, O_RDONLY, argv[optind-2]) == -1 ? 1:0;
                 break;
             case 'w':
-                printf("wronly passed with arg %s\n", optarg);
                 e_acc += open_check(optarg, O_WRONLY, argv[optind-2]) == -1 ? 1:0;
                 break;
             case 'c':
-                printf("command function called\n");
-                int val = execute_command(argc, argv, &optind);
+                e_acc += execute_command(argc, argv, &optind);
                 break;
             case 'v':
                 printf("Verbose mode on\n");
