@@ -9,12 +9,12 @@ tarname=lab1-104916969.tar.gz
 
 
 all: $(pname)
-dist: lab1.c README Makefile
-	tar -zcf $(tarname) lab1.c README Makefile
-check: $(pname)
-
+dist: lab1.c README Makefile check.sh
+	tar -zcf $(tarname) lab1.c README Makefile check.sh
+check: $(pname) check.sh
+	./check.sh $(pname)
 $(pname): lab1.c
-	$(CC) $(FLAGS) -o $(pname) lab1.c
+	$(CC) $(FLAGS) -o $(pname) -g lab1.c
 debug: lab1.c
 	$(CC) $(FLAGS) -g -o $(pname) lab1.c
 clean:
