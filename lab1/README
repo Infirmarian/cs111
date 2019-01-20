@@ -51,10 +51,13 @@ Tests:
     with the expected output, or lack of output, both on the top level program and within the files
     that were redirected.
 
-Limitations:
+Limitations and Features:
     This program suffers from several limitations, including but not limited to fairly poor program
-    organization, increasing difficulty to read, as well as insufficient test cases
+    organization, increasing difficulty to read, as well as insufficient test cases. One feature of this
+    program is the lack of hard limits on input. Because the list of file descriptors is dynamically resized,
+    any number of files can be opened, and is only limited by system resources.
 
-Documentation provided by the man pages was used extensively for this project.
+Documentation provided by the man pages, especially execvp, malloc, and fork, was used 
+extensively for this project.
     
 

@@ -184,5 +184,6 @@ int main(int argc, char** argv){
                 exit(1);  
         }
     }
+    free(fd_array);
     return !!e_acc; //returns accumulated errors
 }
