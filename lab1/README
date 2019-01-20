@@ -2,3 +2,59 @@ NAME: Robert Geil
 EMAIL: rgeil@ucla.edu
 ID: 104916969
 
+Included Files:
+    - lab1.c
+        Source code for the simpsh program
+    - Makefile
+        Makefile with options to make distribution (make dist), run checks (make check) and clean up (make clean)
+    - README
+        A description of the program
+    - check.sh
+        A series of smoke tests to check the basic functionality of simpsh
+
+Program Description:
+    Simpsh is an implementation of a basic shell, intended for use in automated systems.
+    Files can be specified to be opened, and then used as output or input for shell commands. Example 
+    arguments are presented below:
+    --rdonly filename
+        - Attempts to open the given filename as a readonly file
+    --wronly filename
+        - Attempts to open the given filename as a writeonly file
+    --command i o e cmd args
+        - Takes in input i, output o and error e, each integers, and redirects the IO of the command cmd based on these
+        - Integers for files are described sequentially, such that the first --rdonly or --wronly file is 0
+    --verbose
+        - Increases the verbosity of simpsh such that all commands executed are output to stdout
+    
+    Some examples of valid use are as follows
+        ./simpsh
+        ./simpsh --rdonly in.txt --wronly out.txt --wronly err.txt --command 0 1 2 ls -a
+    
+    Returns:
+        Success: 0
+        Failure: 1
+
+Tests:
+    The set of tests contained in check.sh are basic and by no means complete, but should verify basic
+    functionality of the simpsh program. Tests can be run either with the command make check, or by running
+    $ ./check.sh simpsh 
+    if the executable simpsh has been built. The tests cover at least the following cases:
+        - No options
+        - A single --rdonly flag
+        - A single --wronly flag
+        - An unreadable/unwriteable file
+        - A nonexistant file
+        - Bad arguments
+        - Bad file descriptors
+        - Ordinary command usage
+    For each test, the return code was compared to the expected return code, and the output was compared
+    with the expected output, or lack of output, both on the top level program and within the files
+    that were redirected.
+
+Limitations:
+    This program suffers from several limitations, including but not limited to fairly poor program
+    organization, increasing difficulty to read, as well as insufficient test cases
+
+Documentation provided by the man pages was used extensively for this project.
+    
+

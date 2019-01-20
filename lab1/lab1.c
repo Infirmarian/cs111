@@ -54,7 +54,7 @@ int open_check(char* name, int filemode, char* flagname, int* fd_array, int* siz
 }
 // given a max argument count, an array of strings and an index, the number of arguments
 // until the next argument beginning with '--' is returned
-int get_argument_count(int argc, char** argv, int optind){
+static int get_argument_count(int argc, char** argv, int optind){
     int count = 0;
     while(optind<argc){
         char* cmd = argv[optind];
@@ -152,6 +152,8 @@ int main(int argc, char** argv){
         fprintf(stderr, "Unable to allocate an initial file descriptor array: %s", strerror(errno));
     int fd_count = 0;
     int fd_array_size = 10;
+
+    
     //loop through and parse options
     while(1){
         c = getopt_long(argc, argv, "", long_options, &option_index);
