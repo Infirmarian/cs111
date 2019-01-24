@@ -92,8 +92,10 @@ if [ $? -ne 1 ] || [ ! -s $DIR/err7.txt ]; then
     echo "Test 7 FAILED"
 fi
 
+sleep 1s
 # Test 8: Ordinary command
 ./$1 --rdonly $DIR/a1.txt --wronly $DIR/a8.txt --wronly $DIR/a8e.txt --command 0 1 2 cat &> $DIR/empty8.txt
+echo "$?"
 if [ $? -ne 0 ] || [ -s $DIR/empty8.txt ] || [ -s $DIR/a8e.txt ] || [[ $(<$DIR/a1.txt) != $(<$DIR/a8.txt) ]]; then
     let "error_count+=1"
     echo "Test 8 FAILED"
@@ -108,7 +110,7 @@ fi
 
 # Test 10: Continues past bad file descriptor
 ./$1 --rdonly $DIR/a1.txt --wronly $DIR/DOES_NOT_EXIST --wronly $DIR/a10.txt --wronly $DIR/a10e.txt --command 0 2 3 cat &> $DIR/empty10.txt
-if [ $? -ne 1 ] || [ ! -s $DIR/empty10.txt ] || [ -s $DIR/a8e.txt ] || [[ $(<$DIR/a1.txt) != $(<$DIR/a10.txt) ]]; then
+if [ $? -ne 1 ] || [ ! -s $DIR/empty10.txt ] || [ -s $DIR/a10e.txt ] || [[ $(<$DIR/a1.txt) != $(<$DIR/a10.txt) ]]; then
     let "error_count+=1"
     echo "Test 10 FAILED"
 fi
@@ -132,12 +134,13 @@ fi
 
 # Teardown
 
-rm -rf $DIR
+#rm -rf $DIR
 
 if [ $error_count -gt 0 ]; then
     echo "Tests finished with $error_count errors"
 else
     echo "All tests passed"
+    rm -rf $DIR
 fi
 
 
