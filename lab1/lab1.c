@@ -23,11 +23,10 @@ int open_check(char* name, int filemode, char* flagname, int_array* fd_array){
     if(verbose){
         if(fprintf(stdout, "%s %s\n", flagname, name) < 0)
             fprintf(stderr, "Unable to use fprintf to print command: %s", strerror(errno));
-
         if(fflush(stdout))
             fprintf(stderr, "Unable to flush stdout: %s", strerror(errno));
     }
-    int fd = open(name, filemode);
+    int fd = open(name, filemode, S_IRWXU|S_IRGRP|S_IROTH);
     add_int(fd_array, fd);
     if(fd < 0){
         fprintf(stderr, "Unable to open file %s: %s\n", name, strerror(errno));
@@ -126,8 +125,11 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr, proc_arr
         redirect_input(arr->array[argv[*optind+1][0]-'0'], STDOUT_FILENO);
         redirect_input(arr->array[argv[*optind+2][0]-'0'], STDERR_FILENO);
 
+        close_all_fds(arr); // close all other file descriptors in the child
+
         execvp(argv[*optind+3], argv+*optind+3); //call the argument 
-        
+        fprintf(stderr, "Execvp encountered an error: %s", strerror(errno));
+        exit(122); //TODO: Fix this
     }
     
     //restore the value in argv
@@ -140,32 +142,61 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr, proc_arr
 int wait_for_all_pids(proc_array* pida){
     // for each process id
     int maxrc = 0;
-    for(int i = 0; i<pida->size; i++){
-        int status;
-        //TODO: Implement waiting for child processes to finish using WAIT command
-        do{
-            pid_t v = waitpid(pida->array[i].pid, &status, 0);
-            if(v == -1){
-                fprintf(stderr, "Error waiting for process %d: %s", pida->array[i].pid, strerror(errno));
-                fflush(stderr);
+    int count = 0;
+    pid_t result;
+    int status;
+    while(count < pida->size){
+        result = wait(&status); // waiting here
+        if(result == -1){
+                fprintf(stderr, "Error waiting for process to complete: %s", strerror(errno));
+                fflush(stderr); 
+        }
+        // get a reference to the child process
+        com_t command;
+        int found = false;
+        for(int i = 0; i<pida->size; i++){
+            if(pida->array[i].pid == result){
+                command = pida->array[i];
+                found = true;
+                break;
             }
-            if(WIFEXITED(status)){
+        }
+        if(!found){
+            fprintf(stderr, "Child process %d could not be found among spawned processes", result);
+            fflush(stderr); 
+        }
+        if(WIFEXITED(status)){
                 maxrc = maxrc > WIFEXITED(status) ? maxrc : WIFEXITED(status);
-                if(fprintf(stdout, "exit %d PROCNAME", WIFEXITED(status)) < 0){
+                // print 
+                if(fprintf(stdout, "exit %d ", WIFEXITED(status)) < 0)
                     fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
+                for(int j = 0; j<command.argc; j++){
+                    if(fprintf(stdout, "%s ", command.arg[j]) < 0)
+                        fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
                 }
+                if(fprintf(stdout, "\n") < 0)
+                    fprintf(stderr, "Unable to print newline char: %s", strerror(errno));
                 if(fflush(stdout)){
                     fprintf(stderr, "Unable to flush standard output: %s", strerror(errno));
                 }
+                count ++;
             }else if (WIFSIGNALED(status)){
                 maxrc = maxrc > WTERMSIG(status) ? maxrc : WTERMSIG(status);
-                if(fprintf(stdout, "signal %d procname", WTERMSIG(status)) < 0)
+                if(fprintf(stdout, "signal %d", WTERMSIG(status)) < 0)
                     fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
+                for(int j = 0; j<command.argc; j++){
+                    if(fprintf(stdout, "%s ", command.arg[j]) < 0)
+                        fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
+                }
+                if(fprintf(stdout, "\n") < 0)
+                    fprintf(stderr, "Unable to print newline char: %s", strerror(errno));
                 if(fflush(stdout))
                     fprintf(stderr, "Unable to flush standard output: %s", strerror(errno));
+                count ++;
             }
-        }while(!WIFEXITED(status) && !WIFSIGNALED(status));
+
     }
+    pida->size = 0;
     return maxrc;
 }
 
@@ -279,6 +310,12 @@ int main(int argc, char** argv){
                 break;
             //TODO
             case 'a': // --wait
+                if(verbose){
+                    if(fprintf(stdout, "--wait\n") <0)
+                        fprintf(stderr, "Unable to print to stdout");
+                    if(fflush(stdout))
+                        fprintf(stderr, "Unable to flush standard output");
+                }
                 rc = wait_for_all_pids(&pid_array);
                 e_acc = rc > e_acc ? rc : e_acc;
                 break;

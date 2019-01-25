@@ -41,7 +41,7 @@ int add_int(int_array * arr, int fd){
         // reallocate memory
         int* temp = realloc(arr->array, sizeof(int)*(arr->max + 10));
         if(!temp)
-            fprintf(stderr, "Unable to allocate more room for PID or FD array: %s", strerror(errno));
+            fprintf(stderr, "Unable to allocate more room for FD array: %s", strerror(errno));
         arr->max += 10;
         arr->array = temp;
     }
@@ -55,7 +55,7 @@ int add_proc(proc_array* arr, com_t com){
         // reallocate memory
         com_t* temp = realloc(arr->array, sizeof(com_t)*(arr->max + 10));
         if(!temp)
-            fprintf(stderr, "Unable to allocate more room for PID or FD array: %s", strerror(errno));
+            fprintf(stderr, "Unable to allocate more room for PID array: %s", strerror(errno));
         arr->max += 10;
         arr->array = temp;
     }
@@ -71,6 +71,17 @@ int redirect_input(int oldfd, int newfd){
         if(fflush(stderr))
             fprintf(stderr, "Unable to flush stderr: %s", strerror(errno));
         return -1;
+    }
+    return 0;
+}
+// close all file descriptors in an array
+int close_all_fds(int_array* arr){
+    for(int i = 0; i<arr->size; i++){
+        if(arr->array[i] < 0)
+            continue;
+        if(close(arr->array[i])){
+            fprintf(stderr, "Unable to close file descriptor in child process: %s", strerror(errno));
+        }
     }
     return 0;
 }

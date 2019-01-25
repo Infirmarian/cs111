@@ -20,7 +20,7 @@ typedef struct{
 typedef struct{
     int max;
     int size;
-    com_t * array;
+    com_t* array;
 } proc_array;
 
 int get_argument_count(int argc, char** argv, int optind);
@@ -29,4 +29,5 @@ int add_int(int_array * arr, int fd);
 int add_proc(proc_array* arr, com_t com);
 int redirect_input(int oldfd, int newfd);
 void induce_segfault(int log);
+int close_all_fds(int_array* arr);
 #endif
