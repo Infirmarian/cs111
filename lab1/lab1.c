@@ -16,7 +16,7 @@
 
 static int verbose = 0;
 
-
+// Opens a file safely (eg checks for errors in opening)
 int open_check(char* name, int filemode, char* flagname, int_array* fd_array){
     //print the current operation
     if(verbose){
@@ -27,10 +27,10 @@ int open_check(char* name, int filemode, char* flagname, int_array* fd_array){
             fprintf(stderr, "Unable to flush stdout: %s", strerror(errno));
     }
     int fd = open(name, filemode);
+    add_int(fd_array, fd);
     if(fd < 0){
         fprintf(stderr, "Unable to open file %s: %s\n", name, strerror(errno));
     }
-    add_filedescriptor(fd_array, fd);
     return fd;
 }
 // opens a pipe
@@ -49,14 +49,25 @@ int open_pipe(int_array* arr){
         fprintf(stderr, "Unable to create a pipe: %s\n", strerror(errno));
     }
     // add both read and write ends of the pipe
-    add_filedescriptor(arr, pipenames[0]);
-    add_filedescriptor(arr, pipenames[1]);
+    add_int(arr, pipenames[0]);
+    add_int(arr, pipenames[1]);
     return !!rc;
 
 }
+// close a file descriptor
+int close_fd(int_array* fd_array, int index){
+    int rc = 0;
+    if(close(fd_array->array[index])){
+        fprintf(stderr, "Unable to close file index %d: %s", index, strerror(errno));
+        fflush(stderr);
+        rc = 1;
+    }
+    fd_array->array[index] = -1;
+    return rc;
+}
 
 // executes a command 
-int execute_command(int argc, char** argv, int* optind, int_array* arr){
+int execute_command(int argc, char** argv, int* optind, int_array* arr, int_array* pida){
     (*optind)--;
     int count = get_argument_count(argc, argv, *optind); // get the number of arguments for command
 
@@ -101,6 +112,7 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr){
     }
     if(pid){
         // Parent
+        add_int(pida, pid); //keep track of the 
     }else{
         // redirect children
         // Child
@@ -115,6 +127,16 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr){
     //restore the value in argv
     argv[*optind+count] = stored_arg;
     *optind = *optind + count;
+    return 0;
+}
+
+// waits for all child processes to complete and reports their exit status
+int wait_for_all_pids(int_array* pida){
+    // for each process id
+    for(int i = 0; i<pida->size; i++){
+        int status;
+        //TODO: Implement waiting for child processes to finish
+    }
     return 0;
 }
 
@@ -145,6 +167,7 @@ int main(int argc, char** argv){
         {"wait", no_argument, 0, 'a'},
 
         //extra options
+        {"close", required_argument, 0, 'c'},
         {"abort", no_argument, 0, 'z'},
         {"verbose", no_argument, 0, 'v'},
         {0,0,0,0}
@@ -153,12 +176,21 @@ int main(int argc, char** argv){
     int c;
 
     // set up array for file descriptors
-    int_array array;
-    array.array = malloc(sizeof(int)*10);
-    if(!(array.array))
+    int_array fd_array;
+    fd_array.array = malloc(sizeof(int)*10);
+    if(!fd_array.array)
             fprintf(stderr, "Unable to allocate an initial file descriptor array: %s", strerror(errno));
-    array.size = 0;
-    array.max = 10;
+    fd_array.size = 0;
+    fd_array.max = 10;
+    // Setup array for Process IDs
+    int_array pid_array;
+    pid_array.array = malloc(sizeof(int)*10);
+    if(!pid_array.array)
+            fprintf(stderr, "Unable to allocate an initial PID array: %s", strerror(errno));
+    pid_array.size = 0;
+    pid_array.max = 10;
+
+
     int fileflag = 0;
     //loop through and parse options
     while(1){
@@ -180,31 +212,35 @@ int main(int argc, char** argv){
         }
         switch(c){
             case 'p':   // open a pipe
-                e_acc += open_pipe(&array);
+                e_acc += open_pipe(&fd_array);
                 break;
             case 'r':
-                if(open_check(optarg, O_RDONLY|fileflag, argv[optind-2], &array) == -1)
+                if(open_check(optarg, O_RDONLY|fileflag, argv[optind-2], &fd_array) == -1)
                     e_acc ++;
                 fileflag = 0; //reset fileflags
                 break;
             case 'w':
-                if(open_check(optarg, O_WRONLY|fileflag, argv[optind-2], &array) == -1)
+                if(open_check(optarg, O_WRONLY|fileflag, argv[optind-2], &fd_array) == -1)
                     e_acc ++;
                 fileflag = 0; //reset fileflags
                 break;
             case 'b':
-                if(open_check(optarg, O_RDWR|fileflag, argv[optind-2], &array) == -1)
+                if(open_check(optarg, O_RDWR|fileflag, argv[optind-2], &fd_array) == -1)
                     e_acc ++;
                 fileflag = 0; //reset fileflags
                 break;
             case 'x': // --command (execute)
-                e_acc += execute_command(argc, argv, &optind, &array);
+                e_acc += execute_command(argc, argv, &optind, &fd_array, &pid_array);
                 break;
             //TODO
             case 'a': // --wait
+                
                 break;
             case 'z':
                 induce_segfault(verbose);
+                break;
+            case 'c':
+                close_fd(&fd_array, optarg[0]-'0');
                 break;
             case 'v':
                 verbose = 1;
@@ -218,6 +254,7 @@ int main(int argc, char** argv){
                 exit(1);  
         }
     }
-    free(array.array);
+    free(fd_array.array);
+    free(pid_array.array);
     return !!e_acc; //returns accumulated errors
 }

@@ -36,12 +36,15 @@ int are_valid_filedescriptors(char** argv, int optind, int_array* arr){
     return true;
 }
 
-int add_filedescriptor(int_array * arr, int fd){
-    if(arr->max == arr->size){
+int add_int(int_array * arr, int fd){
+    if(arr->max <= arr->size){
         // reallocate memory
-        if(! realloc(arr->array, sizeof(int)*(arr->max + 10)))
-            fprintf(stderr, "Unable to allocate more room for file descriptors: %s", strerror(errno));
+        printf("Allocating memory!");
+        int* temp = realloc(arr->array, sizeof(int)*(arr->max + 10));
+        if(!temp)
+            fprintf(stderr, "Unable to allocate more room for PID or FD array: %s", strerror(errno));
         arr->max += 10;
+        arr->array = temp;
     }
     arr->array[arr->size] = fd;
     arr->size += 1;

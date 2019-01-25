@@ -13,7 +13,7 @@ typedef struct{
 
 int get_argument_count(int argc, char** argv, int optind);
 int are_valid_filedescriptors(char** argv, int optind, int_array* arr);
-int add_filedescriptor(int_array * arr, int fd);
+int add_int(int_array * arr, int fd);
 int redirect_input(int oldfd, int newfd);
 void induce_segfault(int log);
 #endif
