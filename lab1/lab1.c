@@ -204,9 +204,6 @@ void signal_handler(int signum){
     fprintf(stderr, "%d caught", signum);
     exit(signum);
 }
-void ignore_signal(int signum){
-    // do nothing here
-}
 
 int main(int argc, char** argv){
     int option_index = 0;
@@ -330,7 +327,7 @@ int main(int argc, char** argv){
                 break;
             case 'C': // CATCH N
                 if(verbose){
-                    if(fprintf(stdout, "--catch %s", optarg) <0)
+                    if(fprintf(stdout, "--catch %s\n", optarg) <0)
                         fprintf(stderr, "Unable to print to stdout");
                     if(fflush(stdout))
                         fprintf(stderr, "Unable to flush standard output");
@@ -345,7 +342,7 @@ int main(int argc, char** argv){
                     if(fflush(stdout))
                         fprintf(stderr, "Unable to flush standard output");
                 }
-                signal(atoi(optarg), ignore_signal);
+                signal(atoi(optarg), SIG_IGN);
                 break;
             case 'd': //Default case
                 if(verbose){
