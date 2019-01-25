@@ -10,6 +10,7 @@
 #include <sys/errno.h>
 #include <unistd.h>
 #include "utils.h"
+#include <sys/wait.h>
 
 #define true 1
 #define false 0
@@ -67,7 +68,7 @@ int close_fd(int_array* fd_array, int index){
 }
 
 // executes a command 
-int execute_command(int argc, char** argv, int* optind, int_array* arr, int_array* pida){
+int execute_command(int argc, char** argv, int* optind, int_array* arr, proc_array* pida){
     (*optind)--;
     int count = get_argument_count(argc, argv, *optind); // get the number of arguments for command
 
@@ -79,6 +80,7 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr, int_arra
                     fprintf(stderr, "Error occurred while printing verbose command: %s", strerror(errno));
                 }
         }
+        fprintf(stdout, "\n");
         if(fflush(stdout)){
             fprintf(stderr, "Error occurred while flushing stdout: %s", strerror(errno));
         }
@@ -112,7 +114,11 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr, int_arra
     }
     if(pid){
         // Parent
-        add_int(pida, pid); //keep track of the 
+        com_t t;
+        t.pid = pid;
+        t.arg = argv + *optind + 3;
+        t.argc = count - 3;
+        add_proc(pida, t); //keep track of the 
     }else{
         // redirect children
         // Child
@@ -131,13 +137,44 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr, int_arra
 }
 
 // waits for all child processes to complete and reports their exit status
-int wait_for_all_pids(int_array* pida){
+int wait_for_all_pids(proc_array* pida){
     // for each process id
+    int maxrc = 0;
     for(int i = 0; i<pida->size; i++){
         int status;
-        //TODO: Implement waiting for child processes to finish
+        //TODO: Implement waiting for child processes to finish using WAIT command
+        do{
+            pid_t v = waitpid(pida->array[i].pid, &status, 0);
+            if(v == -1){
+                fprintf(stderr, "Error waiting for process %d: %s", pida->array[i].pid, strerror(errno));
+                fflush(stderr);
+            }
+            if(WIFEXITED(status)){
+                maxrc = maxrc > WIFEXITED(status) ? maxrc : WIFEXITED(status);
+                if(fprintf(stdout, "exit %d PROCNAME", WIFEXITED(status)) < 0){
+                    fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
+                }
+                if(fflush(stdout)){
+                    fprintf(stderr, "Unable to flush standard output: %s", strerror(errno));
+                }
+            }else if (WIFSIGNALED(status)){
+                maxrc = maxrc > WTERMSIG(status) ? maxrc : WTERMSIG(status);
+                if(fprintf(stdout, "signal %d procname", WTERMSIG(status)) < 0)
+                    fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
+                if(fflush(stdout))
+                    fprintf(stderr, "Unable to flush standard output: %s", strerror(errno));
+            }
+        }while(!WIFEXITED(status) && !WIFSIGNALED(status));
     }
-    return 0;
+    return maxrc;
+}
+
+void signal_handler(int signum){
+    fprintf(stderr, "%d caught", signum);
+    exit(signum);
+}
+void ignore_signal(int signum){
+    // do nothing here
 }
 
 int main(int argc, char** argv){
@@ -170,6 +207,11 @@ int main(int argc, char** argv){
         {"close", required_argument, 0, 'c'},
         {"abort", no_argument, 0, 'z'},
         {"verbose", no_argument, 0, 'v'},
+        {"catch", required_argument, 0, 'C'},
+        {"ignore", required_argument, 0, 'i'},
+        {"default", required_argument, 0, 'd'},
+        {"pause", no_argument, 0, 'P'},
+
         {0,0,0,0}
     };
     int e_acc = 0;
@@ -183,8 +225,8 @@ int main(int argc, char** argv){
     fd_array.size = 0;
     fd_array.max = 10;
     // Setup array for Process IDs
-    int_array pid_array;
-    pid_array.array = malloc(sizeof(int)*10);
+    proc_array pid_array;
+    pid_array.array = malloc(sizeof(com_t)*10);
     if(!pid_array.array)
             fprintf(stderr, "Unable to allocate an initial PID array: %s", strerror(errno));
     pid_array.size = 0;
@@ -210,31 +252,35 @@ int main(int argc, char** argv){
             fileflag = fileflag | flags[c];
             continue;
         }
+        int rc;
         switch(c){
             case 'p':   // open a pipe
-                e_acc += open_pipe(&fd_array);
+                rc = open_pipe(&fd_array);
+                e_acc = rc > e_acc ? rc : e_acc;
                 break;
             case 'r':
                 if(open_check(optarg, O_RDONLY|fileflag, argv[optind-2], &fd_array) == -1)
-                    e_acc ++;
+                    e_acc = 1 > e_acc ? 1:e_acc;
                 fileflag = 0; //reset fileflags
                 break;
             case 'w':
                 if(open_check(optarg, O_WRONLY|fileflag, argv[optind-2], &fd_array) == -1)
-                    e_acc ++;
+                    e_acc = 1 > e_acc ? 1:e_acc;
                 fileflag = 0; //reset fileflags
                 break;
             case 'b':
                 if(open_check(optarg, O_RDWR|fileflag, argv[optind-2], &fd_array) == -1)
-                    e_acc ++;
+                    e_acc = 1 > e_acc ? 1:e_acc;
                 fileflag = 0; //reset fileflags
                 break;
             case 'x': // --command (execute)
-                e_acc += execute_command(argc, argv, &optind, &fd_array, &pid_array);
+                rc = execute_command(argc, argv, &optind, &fd_array, &pid_array);
+                e_acc = rc > e_acc ? rc : e_acc;
                 break;
             //TODO
             case 'a': // --wait
-                
+                rc = wait_for_all_pids(&pid_array);
+                e_acc = rc > e_acc ? rc : e_acc;
                 break;
             case 'z':
                 induce_segfault(verbose);
@@ -245,9 +291,48 @@ int main(int argc, char** argv){
             case 'v':
                 verbose = 1;
                 break;
+            case 'C': // CATCH N
+                if(verbose){
+                    if(fprintf(stdout, "--catch %s", optarg) <0)
+                        fprintf(stderr, "Unable to print to stdout");
+                    if(fflush(stdout))
+                        fprintf(stderr, "Unable to flush standard output");
+
+                }
+                signal(atoi(optarg), signal_handler);
+                break;
+            case 'i': //Ignore N
+                if(verbose){
+                    if(fprintf(stdout, "--ignore %s\n", optarg) <0)
+                        fprintf(stderr, "Unable to print to stdout");
+                    if(fflush(stdout))
+                        fprintf(stderr, "Unable to flush standard output");
+                }
+                signal(atoi(optarg), ignore_signal);
+                break;
+            case 'd': //Default case
+                if(verbose){
+                    if(fprintf(stdout, "--default %s\n", optarg) <0)
+                        fprintf(stderr, "Unable to print to stdout");
+                    if(fflush(stdout))
+                        fprintf(stderr, "Unable to flush standard output");
+
+                }
+                signal(atoi(optarg), SIG_DFL);
+                break;
+            case 'P': // Pause
+                if(verbose){
+                    if(fprintf(stdout, "--pause\n") <0)
+                        fprintf(stderr, "Unable to print to stdout");
+                    if(fflush(stdout))
+                        fprintf(stderr, "Unable to flush standard output");
+
+                }
+                pause();
+                break;
             case '?':
                 fprintf(stderr, "Error, unknown option %s passed in\n", argv[optind-1]);
-                e_acc += 1;
+                e_acc = 1 > e_acc? 1:e_acc;
                 break;
             default:
                 // This should never be reached
@@ -256,5 +341,5 @@ int main(int argc, char** argv){
     }
     free(fd_array.array);
     free(pid_array.array);
-    return !!e_acc; //returns accumulated errors
+    return e_acc; //returns accumulated errors
 }

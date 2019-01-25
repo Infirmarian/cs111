@@ -39,7 +39,6 @@ int are_valid_filedescriptors(char** argv, int optind, int_array* arr){
 int add_int(int_array * arr, int fd){
     if(arr->max <= arr->size){
         // reallocate memory
-        printf("Allocating memory!");
         int* temp = realloc(arr->array, sizeof(int)*(arr->max + 10));
         if(!temp)
             fprintf(stderr, "Unable to allocate more room for PID or FD array: %s", strerror(errno));
@@ -47,6 +46,20 @@ int add_int(int_array * arr, int fd){
         arr->array = temp;
     }
     arr->array[arr->size] = fd;
+    arr->size += 1;
+    return 0;
+}
+
+int add_proc(proc_array* arr, com_t com){
+    if(arr->max <= arr->size){
+        // reallocate memory
+        com_t* temp = realloc(arr->array, sizeof(com_t)*(arr->max + 10));
+        if(!temp)
+            fprintf(stderr, "Unable to allocate more room for PID or FD array: %s", strerror(errno));
+        arr->max += 10;
+        arr->array = temp;
+    }
+    arr->array[arr->size] = com;
     arr->size += 1;
     return 0;
 }
