@@ -95,7 +95,6 @@ fi
 sleep 1s
 # Test 8: Ordinary command
 ./$1 --rdonly $DIR/a1.txt --wronly $DIR/a8.txt --wronly $DIR/a8e.txt --command 0 1 2 cat &> $DIR/empty8.txt
-echo "$?"
 if [ $? -ne 0 ] || [ -s $DIR/empty8.txt ] || [ -s $DIR/a8e.txt ] || [[ $(<$DIR/a1.txt) != $(<$DIR/a8.txt) ]]; then
     let "error_count+=1"
     echo "Test 8 FAILED"
@@ -131,11 +130,113 @@ if [ $? -ne 0 ] || [[ $(<$DIR/command.txt) != "--rdonly $DIR/a1.txt" ]]; then
     echo "Test 12 FAILED"
 fi
 
+# Test 13: Create file
+./$1 --creat --rdonly $DIR/new.txt 1> $DIR/test13o 2> $DIR/test13e
+if [ $? -ne 0 ] || [ ! -e $DIR/new.txt ] || [ -s $DIR/test13o ] || [ -s $DIR/test13e ]; then
+    let "error_count+=1"
+    echo "Test 13 FAILED"
+fi
+
+# Test 14: Create and excl
+touch $DIR/exists.txt
+./$1 --creat --excel --rdonly $DIR/exists.txt 1> $DIR/test14o 2> $DIR/test14e
+if [ $? -ne 1 ] || [ -s $DIR/test14o ] || [ ! -s $DIR/test14e ]; then
+    let "error_count+=1"
+    echo "Test 14 FAILED"
+fi
+
+# Test 16: Abort
+./$1 --abort 1> $DIR/test16o 2> $DIR/test16e
+if [ $? -ne 139 ] || [ -s $DIR/test16o ] || [ -s $DIR/test16e ]; then
+    let "error_count+=1"
+    echo "Test 16 FAILED"
+fi
+
+# Test 17: Abort and Catch
+./$1 --catch 11 --abort 1> $DIR/test17o 2> $DIR/test17e
+if [ $? -ne 11 ] || [ -s $DIR/test17o ] || [ ! -s $DIR/test17e ] || ! grep -q "11 caught" $DIR/test17e; then
+    let "error_count+=1"
+    echo "Test 17 FAILED"
+fi
+
+# Test 18: Abort and fail to catch
+./$1 --abort --catch 11 1> $DIR/test18o 2> $DIR/test18e
+if [ $? -ne 139 ] || [ -s $DIR/test18o ] || [ -s $DIR/test18e ]; then
+    let "error_count+=1"
+    echo "Test 18 FAILED"
+fi
+
+# Test 19: Catch, reset to default and abort
+./$1 --catch 11 --default 11 --abort 1> $DIR/test19o 2> $DIR/test19e
+if [ $? -ne 139 ] || [ -s $DIR/test19o ] || [ -s $DIR/test19e ]; then
+    let "error_count+=1"
+    echo "Test 19 FAILED"
+fi
+
+# Test 20: Pause
+./$1 --pause 1> $DIR/test20o 2> $DIR/test20e & 
+passed=1
+sleep 0.5
+if ! ps --pid $! > /dev/null; then
+  passed=0
+fi
+kill -10 $!
+sleep 0.5
+if ps --pid $! > /dev/null; then
+passed = 0
+fi
+if [ $passed -ne 1 ] || [ -s $DIR/test20o ] || [ -s $DIR/test20e ]; then
+    let "error_count+=1"
+    echo "Test 20 FAILED"
+fi
+
+# Test 21: Pause and Ignore
+./$1 --ignore 10 --pause 1> $DIR/test21o 2> $DIR/test21e & 
+passed=1
+sleep 0.5
+if ! ps --pid $! > /dev/null; then
+  passed=0
+fi
+kill -10 $!
+sleep 0.5
+if ! ps --pid $! > /dev/null; then
+passed = 0
+fi
+kill -11 $!
+sleep 0.5
+if ps --pid $! > /dev/null; then
+passed = 0
+fi
+if [ $passed -ne 1 ] || [ -s $DIR/test21o ] || [ -s $DIR/test21e ]; then
+    let "error_count+=1"
+    echo "Test 21 FAILED"
+fi
+
+# Test 22: Wait (for nothing)
+./$1 --wait > $DIR/test22o 2> $DIR/test22e
+if [ $? -ne 0 ] || [ -s $DIR/test22o ] || [ -s $DIR/test22e ]; then
+    let "error_count+=1"
+    echo "Test 22 FAILED"
+fi
+
+# Test 23: Wait for cat
+echo "SAMPLE TEXT" > $DIR/23i.txt
+./$1 --rdonly $DIR/23i.txt --creat --wronly $DIR/23o.txt --creat --wronly $DIR/23e.txt --command 0 1 2 cat --wait > $DIR/test23o 2> $DIR/test23e
+if [ $? -ne 0 ] || [ ! -s $DIR/test23o ] || [ -s $DIR/test23e ] || [[$(<$DIR/23o.txt) != $(<$DIR/23i.txt)]] || ! grep -q "exit 0 cat" $DIR/test23o; then
+    let "error_count+=1"
+    echo "Test 23 FAILED"
+fi
+
+# Test 24: pipe
+./$1 --pipe > $DIR/test24o 2> $DIR/test24e
+if [ $? -ne 0 ] || [ -s $DIR/test24o ] || [ -s $DIR/test24e ]; then
+    let "error_count+=1"
+    echo "Test 24 FAILED"
+fi
+
+
 
 # Teardown
-
-#rm -rf $DIR
-
 if [ $error_count -gt 0 ]; then
     echo "Tests finished with $error_count errors"
 else

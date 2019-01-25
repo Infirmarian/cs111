@@ -144,8 +144,9 @@ int wait_for_all_pids(proc_array* pida){
     int maxrc = 0;
     int count = 0;
     pid_t result;
-    int status;
+    int status = 0;
     while(count < pida->size){
+        status = 0;
         result = wait(&status); // waiting here
         if(result == -1){
                 fprintf(stderr, "Error waiting for process to complete: %s", strerror(errno));
@@ -166,9 +167,9 @@ int wait_for_all_pids(proc_array* pida){
             fflush(stderr); 
         }
         if(WIFEXITED(status)){
-                maxrc = maxrc > WIFEXITED(status) ? maxrc : WIFEXITED(status);
+                maxrc = maxrc > WEXITSTATUS(status) ? maxrc : WEXITSTATUS(status);
                 // print 
-                if(fprintf(stdout, "exit %d ", WIFEXITED(status)) < 0)
+                if(fprintf(stdout, "exit %d ", WEXITSTATUS(status)) < 0)
                     fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
                 for(int j = 0; j<command.argc; j++){
                     if(fprintf(stdout, "%s ", command.arg[j]) < 0)
@@ -181,8 +182,9 @@ int wait_for_all_pids(proc_array* pida){
                 }
                 count ++;
             }else if (WIFSIGNALED(status)){
-                maxrc = maxrc > WTERMSIG(status) ? maxrc : WTERMSIG(status);
-                if(fprintf(stdout, "signal %d", WTERMSIG(status)) < 0)
+                // add 128 to the exit status of the child
+                maxrc = maxrc > 128+WTERMSIG(status) ? maxrc : 128+WTERMSIG(status);
+                if(fprintf(stdout, "signal %d ", WTERMSIG(status)) < 0)
                     fprintf(stderr, "Unable to print exit status: %s", strerror(errno));
                 for(int j = 0; j<command.argc; j++){
                     if(fprintf(stdout, "%s ", command.arg[j]) < 0)

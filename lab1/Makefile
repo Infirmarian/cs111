@@ -12,7 +12,7 @@ all: $(pname)
 dist: lab1.c README Makefile check.sh utils.c utils.h
 	tar -zcf $(tarname) lab1.c README Makefile check.sh utils.c utils.h
 check: $(pname) check.sh
-	./check.sh $(pname)
+	./check.sh $(pname) 2> /dev/null
 $(pname): lab1.o utils.o
 	$(CC) $(FLAGS) -o $(pname) lab1.o utils.o
 lab1.o: lab1.c
