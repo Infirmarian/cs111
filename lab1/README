@@ -11,6 +11,10 @@ Included Files:
         A description of the program
     - check.sh
         A series of smoke tests to check the basic functionality of simpsh
+    - utils.c
+        A source file containing some assisting functions for lab1.c
+    - utils.h
+        Header file to declare a few types and functions in utils.c
 
 Program Description:
     Simpsh is an implementation of a basic shell, intended for use in automated systems.
@@ -20,19 +24,71 @@ Program Description:
         - Attempts to open the given filename as a readonly file
     --wronly filename
         - Attempts to open the given filename as a writeonly file
+    --rdwr filename
+        - Attempts to open the given filename as a read/write file
+    --pipe
+        - Creates a pipe which can be used for communication between commands
+        - The pipe takes up 2 file descriptor spots, with one end for writing and one for reading
+    
+
+    The following flags all take no value, and change the filemode of the next opened file. They use the
+    filemode given below, documentation of which can be found on https://www.gnu.org/software/libc/manual/html_node/Open_002dtime-Flags.html
+        --append
+            - O_APPEND
+        --cloexec
+            - O_CLOEXEC
+        --creat
+            - O_CREAT
+        --directory
+            - O_DIRECTORY
+        --dsync
+            - O_DSYNC
+        --excl
+            - O_EXCL
+        --nofollow
+            - O_NOFOLLOW
+        --nonblock
+            - O_NONBLOCK
+        --rsync
+            - O_RSYNC
+        --sync
+            - O_SYNC
+        --trunc
+            - O_TRUNC
+
+    
     --command i o e cmd args
         - Takes in input i, output o and error e, each integers, and redirects the IO of the command cmd based on these
         - Integers for files are described sequentially, such that the first --rdonly or --wronly file is 0
+    --wait
+        - Causes the program to halt, waiting for each spawned command to complete
+        - This sets the return code to the maximum of the children's status codes
+    --close n
+        - Closes the given file descriptor
+    --abort
+        - Causes a segmentation fault and dump core via assignment to a null pointer
+    --catch n
+        - Sets up a signal handler for signal n
+    --ignore n
+        - Sets the program to ignore signal n
+    --default n
+        - Sets the default behavior in response to signal n
     --verbose
         - Increases the verbosity of simpsh such that all commands executed are output to stdout
-    
+    --pause
+        - Pauses the program until a signal is received
+
     Some examples of valid use are as follows
         ./simpsh
         ./simpsh --rdonly in.txt --wronly out.txt --wronly err.txt --command 0 1 2 ls -a
+        ./simpsh --abort
+        ./simpsh --catch 11 --abort
+        ./simpsh --creat --rdonly a.txt --rdwr b.txt --wronly e.txt --command 1 0 2 cat --wait
     
     Returns:
         Success: 0
-        Failure: 1
+        Failure to open/close file descriptor, other internal problem: 1
+        Failure in an awaited child process: maximum return code of awaited children, eg 139
 
 Tests:
     The set of tests contained in check.sh are basic and by no means complete, but should verify basic
@@ -47,15 +103,21 @@ Tests:
         - Bad arguments
         - Bad file descriptors
         - Ordinary command usage
+        - Aborting
+        - Catching, ignoring
+        - Basic pipe usage
+        - Waiting for command to complete
+        - Various file options, like creat
     For each test, the return code was compared to the expected return code, and the output was compared
     with the expected output, or lack of output, both on the top level program and within the files
     that were redirected.
 
 Limitations and Features:
-    This program suffers from several limitations, including but not limited to fairly poor program
-    organization, increasing difficulty to read, as well as insufficient test cases. One feature of this
+    This program suffers from several limitations, primarily insufficient test cases. One feature of this
     program is the lack of hard limits on input. Because the list of file descriptors is dynamically resized,
-    any number of files can be opened, and is only limited by system resources.
+    any number of files can be opened, and is only limited by system resources. In addition, process ids are
+    also stored dynamically, making no limit on the number of children that can be spawned, excepting system
+    resource limitations
 
 Documentation provided by the man pages, especially execvp, malloc, and fork, was used 
 extensively for this project.

@@ -106,7 +106,7 @@ if [ $? -ne 1 ] || [ ! -s $DIR/err7.txt ]; then
     let "error_count+=1"
     echo "Test 9 FAILED"
 fi
-
+sleep 0.5s
 # Test 10: Continues past bad file descriptor
 ./$1 --rdonly $DIR/a1.txt --wronly $DIR/DOES_NOT_EXIST --wronly $DIR/a10.txt --wronly $DIR/a10e.txt --command 0 2 3 cat &> $DIR/empty10.txt
 if [ $? -ne 1 ] || [ ! -s $DIR/empty10.txt ] || [ -s $DIR/a10e.txt ] || [[ $(<$DIR/a1.txt) != $(<$DIR/a10.txt) ]]; then
@@ -222,7 +222,7 @@ fi
 # Test 23: Wait for cat
 echo "SAMPLE TEXT" > $DIR/23i.txt
 ./$1 --rdonly $DIR/23i.txt --creat --wronly $DIR/23o.txt --creat --wronly $DIR/23e.txt --command 0 1 2 cat --wait > $DIR/test23o 2> $DIR/test23e
-if [ $? -ne 0 ] || [ ! -s $DIR/test23o ] || [ -s $DIR/test23e ] || [[$(<$DIR/23o.txt) != $(<$DIR/23i.txt)]] || ! grep -q "exit 0 cat" $DIR/test23o; then
+if [ $? -ne 0 ] || [ ! -s $DIR/test23o ] || [ -s $DIR/test23e ] || [[ $(<$DIR/23o.txt) != $(<$DIR/23i.txt) ]] || ! grep -q "exit 0 cat" $DIR/test23o; then
     let "error_count+=1"
     echo "Test 23 FAILED"
 fi
@@ -232,6 +232,16 @@ fi
 if [ $? -ne 0 ] || [ -s $DIR/test24o ] || [ -s $DIR/test24e ]; then
     let "error_count+=1"
     echo "Test 24 FAILED"
+fi
+
+# Test 25: pipe part 2
+echo "Sample values" > $DIR/in25.txt
+./$1 --pipe --rdonly $DIR/in25.txt --creat --wronly $DIR/out25.txt --creat --wronly $DIR/err25.txt \
+--command 2 1 4 cat --command 0 3 4 cat --close 1 --wait > $DIR/test25o 2> $DIR/test25e
+if [ $? -ne 0 ] || [ ! -s $DIR/test25o ] || [ -s $DIR/test25e ] || [[ $(<$DIR/in25.txt) != $(<$DIR/out25.txt) ]] \
+|| ! grep -q "exit 0 cat" $DIR/test25o; then
+    let "error_count+=1"
+    echo "Test 25 FAILED"
 fi
 
 
