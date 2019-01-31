@@ -11,21 +11,14 @@
 #include <unistd.h>
 #include "utils.h"
 #include <sys/wait.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 
 #define true 1
 #define false 0
 
-static int verbose = 0;
-
 // Opens a file safely (eg checks for errors in opening)
-int open_check(char* name, int filemode, char* flagname, int_array* fd_array){
-    //print the current operation
-    if(verbose){
-        if(fprintf(stdout, "%s %s\n", flagname, name) < 0)
-            fprintf(stderr, "Unable to use fprintf to print command: %s", strerror(errno));
-        if(fflush(stdout))
-            fprintf(stderr, "Unable to flush stdout: %s", strerror(errno));
-    }
+int open_check(char* name, int filemode, int_array* fd_array){
     int fd = open(name, filemode, S_IRWXU|S_IRGRP|S_IROTH);
     add_int(fd_array, fd);
     if(fd < 0){
@@ -36,13 +29,6 @@ int open_check(char* name, int filemode, char* flagname, int_array* fd_array){
 // opens a pipe
 // returns 0 for a successful pipe and 1 for a failure
 int open_pipe(int_array* arr){
-    if(verbose){
-        if(fprintf(stdout, "--pipe\n") < 0)
-            fprintf(stderr, "Unable to use fprintf to print command: %s", strerror(errno));
-
-        if(fflush(stdout))
-            fprintf(stderr, "Unable to flush stdout: %s", strerror(errno));
-    }
     int pipenames[2] = {0,0};
     int rc = pipe(pipenames);
     if(rc){
@@ -67,7 +53,7 @@ int close_fd(int_array* fd_array, int index){
 }
 
 // executes a command 
-int execute_command(int argc, char** argv, int* optind, int_array* arr, proc_array* pida){
+int execute_command(int argc, char** argv, int* optind, int_array* arr, proc_array* pida, int verbose){
     (*optind)--;
     int count = get_argument_count(argc, argv, *optind); // get the number of arguments for command
 
@@ -202,13 +188,11 @@ int wait_for_all_pids(proc_array* pida){
     return maxrc;
 }
 
-void signal_handler(int signum){
-    fprintf(stderr, "%d caught", signum);
-    exit(signum);
-}
-
 int main(int argc, char** argv){
+    struct rusage pre_usage;
     int option_index = 0;
+    int verbose = false;
+    int profile = false;
     static int flags[11] = {
         O_APPEND, O_CLOEXEC, O_CREAT, O_DIRECTORY, O_DSYNC, O_EXCL, O_NOFOLLOW, O_NONBLOCK,  O_RSYNC, O_SYNC, O_TRUNC
     };
@@ -237,6 +221,7 @@ int main(int argc, char** argv){
         {"close", required_argument, 0, 'c'},
         {"abort", no_argument, 0, 'z'},
         {"verbose", no_argument, 0, 'v'},
+        {"profile", no_argument, 0, 'o'},
         {"catch", required_argument, 0, 'C'},
         {"ignore", required_argument, 0, 'i'},
         {"default", required_argument, 0, 'd'},
@@ -271,100 +256,181 @@ int main(int argc, char** argv){
             break;
         // sets up the fileflags
         if(c<11){
-            if(verbose){
-                if(fprintf(stdout, "--%s\n", long_options[option_index].name)<0){
-                    fprintf(stderr, "Unable to print verbose logging statement: %s", strerror(errno));
-                }
-                if(fflush(stdout)){
-                    fprintf(stderr, "Unable to flush stdout: %s", strerror(errno));
-                }
-            }
+            if(profile)
+                safegetrusage(RUSAGE_SELF, &pre_usage);
+            if(verbose)
+                safeprint1("--%s\n",long_options[option_index].name);
             fileflag = fileflag | flags[c];
+            if(profile){
+                safeprint1("--%s\t\t", long_options[option_index].name);
+                reportresources(&pre_usage);
+            }
             continue;
         }
         int rc;
         switch(c){
-            case 'p':   // open a pipe
+            case 'p': // --pipe
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint("--pipe\n");
                 rc = open_pipe(&fd_array);
                 e_acc = rc > e_acc ? rc : e_acc;
+                if(profile){
+                    safeprint("--pipe\t\t");
+                    reportresources(&pre_usage);
+                }
                 break;
-            case 'r':
-                if(open_check(optarg, O_RDONLY|fileflag, argv[optind-2], &fd_array) == -1)
+            case 'r': // --rdonly filename
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint2("%s %s\n", argv[optind-2], optarg);
+                if(open_check(optarg, O_RDONLY|fileflag, &fd_array) == -1)
                     e_acc = 1 > e_acc ? 1:e_acc;
                 fileflag = 0; //reset fileflags
+                if(profile){
+                    safeprint("--rdonly\t");
+                    reportresources(&pre_usage);
+                }
                 break;
-            case 'w':
-                if(open_check(optarg, O_WRONLY|fileflag, argv[optind-2], &fd_array) == -1)
+            case 'w': // --wronly filename
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint2("%s %s\n", argv[optind-2], optarg);
+                if(open_check(optarg, O_WRONLY|fileflag, &fd_array) == -1)
                     e_acc = 1 > e_acc ? 1:e_acc;
                 fileflag = 0; //reset fileflags
+                if(profile){
+                    safeprint("--wronly\t");
+                    reportresources(&pre_usage);
+                }
                 break;
-            case 'b':
-                if(open_check(optarg, O_RDWR|fileflag, argv[optind-2], &fd_array) == -1)
+            case 'b': // --rdwr filename
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint2("%s %s\n", argv[optind-2], optarg);
+                if(open_check(optarg, O_RDWR|fileflag, &fd_array) == -1)
                     e_acc = 1 > e_acc ? 1:e_acc;
                 fileflag = 0; //reset fileflags
+                if(profile){
+                    safeprint("--rdwr\t\t");
+                    reportresources(&pre_usage);
+                }
                 break;
             case 'x': // --command (execute)
-                rc = execute_command(argc, argv, &optind, &fd_array, &pid_array);
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                rc = execute_command(argc, argv, &optind, &fd_array, &pid_array, verbose);
                 e_acc = rc > e_acc ? rc : e_acc;
-                break;
-            //TODO
-            case 'a': // --wait
-                if(verbose){
-                    if(fprintf(stdout, "--wait\n") <0)
-                        fprintf(stderr, "Unable to print to stdout");
-                    if(fflush(stdout))
-                        fprintf(stderr, "Unable to flush standard output");
+                if(profile){
+                    safeprint("--command\t");
+                    reportresources(&pre_usage);
                 }
+                break;
+            case 'a': // --wait //TODO: get resource usage for children!
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint("--wait\n");
                 rc = wait_for_all_pids(&pid_array);
                 e_acc = rc > e_acc ? rc : e_acc;
+                if(profile){
+                    safeprint("--wait\t\t");
+                    reportresources(&pre_usage);
+                }
                 break;
-            case 'z':
-                induce_segfault(verbose);
+            case 'z': // --abort
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint("--abort\n");
+                induce_segfault();
+                // this will never be called, *shrug*
+                if(profile){
+                    safeprint("--abort\t");
+                    reportresources(&pre_usage);
+                }
                 break;
-            case 'c':
+            case 'c': // --close FILENO
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint1("--close %s\n", optarg);
                 close_fd(&fd_array, optarg[0]-'0');
-                break;
-            case 'v':
-                verbose = 1;
-                break;
-            case 'C': // CATCH N
-                if(verbose){
-                    if(fprintf(stdout, "--catch %s\n", optarg) <0)
-                        fprintf(stderr, "Unable to print to stdout");
-                    if(fflush(stdout))
-                        fprintf(stderr, "Unable to flush standard output");
-
+                if(profile){
+                    safeprint("--close\t\t");
+                    reportresources(&pre_usage);
                 }
+                break;
+            case 'v': // --verbose
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint("--verbose\n");
+                verbose = true;
+                if(profile){
+                    safeprint("--verbose\t");
+                    reportresources(&pre_usage);
+                }
+                break;
+            case 'o': // --profile
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint("--profile\n");
+                int oldprof = profile;
+                profile = true;
+                if(oldprof){ // need to maintain the old usage, because setting profile would trigger this
+                    safeprint("--profile\t");
+                    reportresources(&pre_usage);
+                }
+                break;
+            case 'C': // --catch N
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                   safeprint1("--catch %s\n", optarg);
                 signal(atoi(optarg), signal_handler);
-                break;
-            case 'i': //Ignore N
-                if(verbose){
-                    if(fprintf(stdout, "--ignore %s\n", optarg) <0)
-                        fprintf(stderr, "Unable to print to stdout");
-                    if(fflush(stdout))
-                        fprintf(stderr, "Unable to flush standard output");
+                if(profile){
+                    safeprint("--catch\t\t");
+                    reportresources(&pre_usage);
                 }
+                break;
+            case 'i': // --ignore N
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint1("--ignore %s\n", optarg);
                 signal(atoi(optarg), SIG_IGN);
-                break;
-            case 'd': //Default case
-                if(verbose){
-                    if(fprintf(stdout, "--default %s\n", optarg) <0)
-                        fprintf(stderr, "Unable to print to stdout");
-                    if(fflush(stdout))
-                        fprintf(stderr, "Unable to flush standard output");
-
+                if(profile){
+                    safeprint("--ignore\t");
+                    reportresources(&pre_usage);
                 }
+                break;
+            case 'd': // --default
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint1("--default %s\n", optarg);
                 signal(atoi(optarg), SIG_DFL);
-                break;
-            case 'P': // Pause
-                if(verbose){
-                    if(fprintf(stdout, "--pause\n") <0)
-                        fprintf(stderr, "Unable to print to stdout");
-                    if(fflush(stdout))
-                        fprintf(stderr, "Unable to flush standard output");
-
+                if(profile){
+                    safeprint("--default\t");
+                    reportresources(&pre_usage);
                 }
+                break;
+            case 'P': // --pause
+                if(profile)
+                    safegetrusage(RUSAGE_SELF, &pre_usage);
+                if(verbose)
+                    safeprint("--pause\n");
                 pause();
+                if(profile){
+                    safeprint("--pause\t");
+                    reportresources(&pre_usage);
+                }
                 break;
             case '?':
                 fprintf(stderr, "Error, unknown option %s passed in\n", argv[optind-1]);
