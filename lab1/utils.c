@@ -157,13 +157,31 @@ int timeval_subtract (struct timeval *result, struct timeval *x, struct timeval 
   /* Return 1 if result is negative. */
   return x->tv_sec < y->tv_sec;
 }
+void add_times(struct timeval* result, struct timeval* x, struct timeval* y){
+    int us = x->tv_usec + y->tv_usec;
+    int sec = x->tv_sec + y->tv_sec;
+    if(us >= 1000000){
+        us -= 1000000;
+        sec += 1;
+    }
+    result->tv_sec = sec;
+    result->tv_usec = us;
+}
 
-void reportresources(struct rusage * pre){
+
+void reportresources(int flag, struct rusage * pre){
     struct rusage post;
-    safegetrusage(RUSAGE_SELF, &post);
-    struct timeval timedif;
-    if(timeval_subtract(&timedif, &(post.ru_utime), &(pre->ru_utime)))
+    safegetrusage(flag, &post);
+    struct timeval userdif;
+    struct timeval sysdif;
+    struct timeval totalTime;
+
+    if(timeval_subtract(&userdif, &(post.ru_utime), &(pre->ru_utime)))
         fprintf(stderr, "ERROR: Time value was negative\n");
-    fprintf(stdout, "user: %ld:%03ld\n", timedif.tv_sec, timedif.tv_usec);
-    
+    fprintf(stdout, "user: %ld.%06ld sec, ", userdif.tv_sec, userdif.tv_usec);
+    if(timeval_subtract(&sysdif, &(post.ru_stime), &(pre->ru_stime)))
+        fprintf(stderr, "ERROR: Time value was negative\n");
+    fprintf(stdout, "system: %ld.%06ld sec, ", sysdif.tv_sec, sysdif.tv_usec);
+    add_times(&totalTime, &userdif, &sysdif);
+    fprintf(stdout, "total: %ld.%06ld sec,\n", totalTime.tv_sec, totalTime.tv_usec);
 }

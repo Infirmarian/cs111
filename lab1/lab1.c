@@ -51,7 +51,6 @@ int close_fd(int_array* fd_array, int index){
     fd_array->array[index] = -1;
     return rc;
 }
-
 // executes a command 
 int execute_command(int argc, char** argv, int* optind, int_array* arr, proc_array* pida, int verbose){
     (*optind)--;
@@ -123,6 +122,9 @@ int execute_command(int argc, char** argv, int* optind, int_array* arr, proc_arr
     *optind = *optind + count;
     return 0;
 }
+/*
+
+*/
 
 // waits for all child processes to complete and reports their exit status
 int wait_for_all_pids(proc_array* pida){
@@ -189,7 +191,7 @@ int wait_for_all_pids(proc_array* pida){
 }
 
 int main(int argc, char** argv){
-    struct rusage pre_usage;
+    struct rusage pre_usage, child_usage;
     int option_index = 0;
     int verbose = false;
     int profile = false;
@@ -263,7 +265,7 @@ int main(int argc, char** argv){
             fileflag = fileflag | flags[c];
             if(profile){
                 safeprint1("--%s\t\t", long_options[option_index].name);
-                reportresources(&pre_usage);
+                reportresources(RUSAGE_SELF, &pre_usage);
             }
             continue;
         }
@@ -278,7 +280,7 @@ int main(int argc, char** argv){
                 e_acc = rc > e_acc ? rc : e_acc;
                 if(profile){
                     safeprint("--pipe\t\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'r': // --rdonly filename
@@ -291,7 +293,7 @@ int main(int argc, char** argv){
                 fileflag = 0; //reset fileflags
                 if(profile){
                     safeprint("--rdonly\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'w': // --wronly filename
@@ -304,7 +306,7 @@ int main(int argc, char** argv){
                 fileflag = 0; //reset fileflags
                 if(profile){
                     safeprint("--wronly\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'b': // --rdwr filename
@@ -317,7 +319,7 @@ int main(int argc, char** argv){
                 fileflag = 0; //reset fileflags
                 if(profile){
                     safeprint("--rdwr\t\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'x': // --command (execute)
@@ -327,19 +329,23 @@ int main(int argc, char** argv){
                 e_acc = rc > e_acc ? rc : e_acc;
                 if(profile){
                     safeprint("--command\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'a': // --wait //TODO: get resource usage for children!
-                if(profile)
+                if(profile){
                     safegetrusage(RUSAGE_SELF, &pre_usage);
+                    safegetrusage(RUSAGE_CHILDREN, &child_usage);
+                }
                 if(verbose)
                     safeprint("--wait\n");
                 rc = wait_for_all_pids(&pid_array);
                 e_acc = rc > e_acc ? rc : e_acc;
                 if(profile){
+                    safeprint("children\t");
+                    reportresources(RUSAGE_CHILDREN, &child_usage);
                     safeprint("--wait\t\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'z': // --abort
@@ -351,7 +357,7 @@ int main(int argc, char** argv){
                 // this will never be called, *shrug*
                 if(profile){
                     safeprint("--abort\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'c': // --close FILENO
@@ -362,7 +368,7 @@ int main(int argc, char** argv){
                 close_fd(&fd_array, optarg[0]-'0');
                 if(profile){
                     safeprint("--close\t\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'v': // --verbose
@@ -373,7 +379,7 @@ int main(int argc, char** argv){
                 verbose = true;
                 if(profile){
                     safeprint("--verbose\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'o': // --profile
@@ -385,7 +391,7 @@ int main(int argc, char** argv){
                 profile = true;
                 if(oldprof){ // need to maintain the old usage, because setting profile would trigger this
                     safeprint("--profile\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'C': // --catch N
@@ -396,7 +402,7 @@ int main(int argc, char** argv){
                 signal(atoi(optarg), signal_handler);
                 if(profile){
                     safeprint("--catch\t\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'i': // --ignore N
@@ -407,7 +413,7 @@ int main(int argc, char** argv){
                 signal(atoi(optarg), SIG_IGN);
                 if(profile){
                     safeprint("--ignore\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'd': // --default
@@ -418,7 +424,7 @@ int main(int argc, char** argv){
                 signal(atoi(optarg), SIG_DFL);
                 if(profile){
                     safeprint("--default\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case 'P': // --pause
@@ -429,7 +435,7 @@ int main(int argc, char** argv){
                 pause();
                 if(profile){
                     safeprint("--pause\t");
-                    reportresources(&pre_usage);
+                    reportresources(RUSAGE_SELF, &pre_usage);
                 }
                 break;
             case '?':

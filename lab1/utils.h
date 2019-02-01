@@ -35,6 +35,6 @@ void safeprint(char const* str);
 void safeprint1(char const* str, char const* app);
 void safeprint2(char const* str, char const* app, char const* val2);
 void signal_handler(int signum);
-void reportresources(struct rusage * pre);
+void reportresources(int flag, struct rusage * pre);
 void safegetrusage(int flag, struct rusage * u);
 #endif
