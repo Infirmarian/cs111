@@ -183,5 +183,5 @@ void reportresources(int flag, struct rusage * pre){
         fprintf(stderr, "ERROR: Time value was negative\n");
     fprintf(stdout, "system: %ld.%06ld sec, ", sysdif.tv_sec, sysdif.tv_usec);
     add_times(&totalTime, &userdif, &sysdif);
-    fprintf(stdout, "total: %ld.%06ld sec,\n", totalTime.tv_sec, totalTime.tv_usec);
+    fprintf(stdout, "total: %ld.%06ld sec\n", totalTime.tv_sec, totalTime.tv_usec);
 }

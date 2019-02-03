@@ -15,6 +15,8 @@ Included Files:
         A source file containing some assisting functions for lab1.c
     - utils.h
         Header file to declare a few types and functions in utils.c
+    - report.pdf
+        Report that details the speed/profile tests run on simpsh and the results of these tests
 
 Program Description:
     Simpsh is an implementation of a basic shell, intended for use in automated systems.
@@ -67,6 +69,8 @@ Program Description:
         - Closes the given file descriptor
     --abort
         - Causes a segmentation fault and dump core via assignment to a null pointer
+    --profile
+        - Report the (approximate) user, system and total CPU usage after each option executed and all children waited for
     --catch n
         - Sets up a signal handler for signal n
     --ignore n
@@ -84,6 +88,7 @@ Program Description:
         ./simpsh --abort
         ./simpsh --catch 11 --abort
         ./simpsh --creat --rdonly a.txt --rdwr b.txt --wronly e.txt --command 1 0 2 cat --wait
+        ./simpsh --verbose --profile --creat --rdwr c.txt --rdonly d.txt --command 1 0 0 cat --wait
     
     Returns:
         Success: 0
@@ -108,6 +113,7 @@ Tests:
         - Basic pipe usage
         - Waiting for command to complete
         - Various file options, like creat
+        - Profile option
     For each test, the return code was compared to the expected return code, and the output was compared
     with the expected output, or lack of output, both on the top level program and within the files
     that were redirected.
@@ -117,9 +123,13 @@ Limitations and Features:
     program is the lack of hard limits on input. Because the list of file descriptors is dynamically resized,
     any number of files can be opened, and is only limited by system resources. In addition, process ids are
     also stored dynamically, making no limit on the number of children that can be spawned, excepting system
-    resource limitations
+    resource limitations. Signal handlers are also all written with signal safe functions (eg write) rather than
+    buffered output. The program also has the feature of multiple files, meaning that the functionality is
+    broken up into multiple files that are linked at compile time. This helps for code organization and
+    maintainability.
 
 Documentation provided by the man pages, especially execvp, malloc, and fork, was used 
-extensively for this project.
+extensively for this project. A code snippet, function timeval_subtract in file utils.c was
+sourced from https://www.gnu.org/software/libc/manual/html_node/Elapsed-Time.html
     
 
