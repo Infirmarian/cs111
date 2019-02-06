@@ -14,11 +14,11 @@ dist: lab2_add.c Makefile
 check: $(pname) check.sh
 	echo "TODO: write checks"
 $(pname): lab2_add.o
-	$(CC) $(FLAGS) -o $(pname) lab2_add.o
+	$(CC) $(FLAGS) -pthread -o $(pname) lab2_add.o
 lab2_add.o: lab2_add.c
 	$(CC) $(FLAGS) -c lab2_add.c
 debug:
-	$(CC) $(FLAGS) -g -o $(pname) lab2_add.c
+	$(CC) $(FLAGS) -g -pthread -o $(pname) lab2_add.c
 clean:
 	$(RM) $(pname)
 	$(RM) $(tarname)
