@@ -10,13 +10,21 @@
 #include <errno.h>
 
 #define USED_CLOCK CLOCK_REALTIME
+#define true 1
+#define false 0
+typedef int bool;
 
-static int opt_yield=0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct arg_struct {
 		long long* pointer;
 		long long value;
 		int iterations;
+		bool sync_mutex;
+		bool sync_spin;
+		bool sync_compare;
+		bool yield;
+		volatile int spin_lock_value;
 	};
 
 // this function was taken from https://www.gnu.org/software/libc/manual/html_node/Elapsed-Time.html
@@ -42,21 +50,56 @@ int timespec_subtract (struct timespec *result, struct timespec *x, struct times
   return x->tv_sec < y->tv_sec;
 }
 
-void add(long long *pointer, long long value) {
+void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool sync_spin, bool sync_compare, int spin_lock) {
+	if(sync_mutex){
+		pthread_mutex_lock(&mutex);
+		long long sum = *pointer + value;
+		// yield if specified
+		if (yield)
+			sched_yield();
+		*pointer = sum;
+		pthread_mutex_unlock(&mutex);
+		return;
+	}
+	if(sync_spin){
+		while(__sync_lock_test_and_set(&spin_lock, 1)){
+			// complete the addition and store here, knowing we are the only thread accessing the pointer
+			long long sum = *pointer + value;
+			if(yield)
+				sched_yield();
+			*pointer = sum;
+			__sync_lock_release(&spin_lock);
+		}
+		return;
+	}
+	if(sync_compare){
+		long long new_sum;
+		long long current;
+		do{
+			current = *pointer;
+			new_sum = *pointer + value;
+			if(yield)
+				sched_yield();
+			
+		}while(__sync_val_compare_and_swap(pointer, current, new_sum) != current);
+		return;
+	}
+	// default, no synchronization
 	long long sum = *pointer + value;
 	// yield if specified
-	if (opt_yield)
-        sched_yield();
+	if (yield)
+		sched_yield();
 	*pointer = sum;
+	return;
 }
 
 void* threaded_add(void* args){
 	struct arg_struct* a = (struct arg_struct*)args;
 	for(int i = 0; i<a->iterations; i++){
-		add(a->pointer, a->value);
+		add(a->pointer, a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, a->spin_lock_value);
 	}
 	for(int i = 0; i<a->iterations; i++){
-		add(a->pointer, -1*a->value);
+		add(a->pointer, -1*a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, a->spin_lock_value);
 	}
 	return 0;
 }
@@ -69,6 +112,7 @@ int main(int argc, char** argv){
 	int thread_count = 1;
 	int iterations = 1;
 	int exit_status = 0;
+	bool opt_yield;
 	char program_name[16] = "add";
 	// struct for long options
 	static struct option long_options[] ={
@@ -78,7 +122,7 @@ int main(int argc, char** argv){
 		{"sync", required_argument, 0, 's'},
 		{0,0,0,0}
 	};
-	int is_using_lock = 0;
+	char lock = 0;
 	// iterate through each argument and assign the values if needed
   	while(1){
     	c = getopt_long(argc, argv, "", long_options, &option_index);
@@ -93,16 +137,19 @@ int main(int argc, char** argv){
 				iterations = atoi(optarg);
 				break;
 			case 'y':
-				opt_yield = 1;
+				opt_yield = true;
 				strcpy(program_name, "add-yield");
 				break;
 			case 's':
 				switch(optarg[0]){
 					case 'm': // mutex lock
+					lock = 'm';
 					break;
 					case 's': // spin lock
+					lock = 's';
 					break;
 					case 'c': // compare and swap
+					lock = 'c';
 					break;
 					default:
 						fprintf(stderr, "Bad option passed in for sync type\n");
@@ -116,26 +163,54 @@ int main(int argc, char** argv){
 				exit(1);
 		}
   	}
-	if(!is_using_lock){
+	  // set up the program name
+	if(!lock){
 		strcat(program_name, "-none");
+	}else{
+		int len = strlen(program_name);
+		program_name[len] = '-';
+		program_name[len+1] = lock;
+		program_name[len+2] = '\0';
+	}
+	bool sync_mutex = false;
+	bool sync_spin = false;
+	bool sync_compare = false;
+	switch(lock){
+		case 'm':
+			sync_mutex = true;
+			break;
+		case 's':
+			sync_spin = true;
+			break;
+		case 'c':
+			sync_compare = true;
+			break;
+		default:
+		break;
 	}
 	  // allocate [thread] number
 	pthread_t* threads;
-	threads = calloc(thread_count, sizeof(pthread_t));
+	threads = malloc(thread_count*sizeof(pthread_t));
 	if(!threads){
 		exit_status = 1;
 		fprintf(stderr, "Error, unable to allocate memory to hold threads: %s", strerror(errno));
 		if(fflush(stderr))
 			fprintf(stderr, "Unable to flush stderr: %s", strerror(errno));
 	}
-	struct arg_struct a;
-		a.iterations = iterations;
-		a.pointer = &counter;
-		a.value = -1;
+	struct arg_struct a = {
+		.iterations = iterations,
+		.pointer = &counter,
+		.value = 1,
+		.sync_mutex = sync_mutex,
+		.sync_spin = sync_spin,
+		.sync_compare = sync_compare,
+		.yield = opt_yield,
+		.spin_lock_value = 0
+	};
 	// get starting time
 	struct timespec init_time,final_time;
 	if(clock_gettime(USED_CLOCK,&init_time)){
-		fprintf(stderr, "Unable to get final clock time: %s", strerror(errno));
+		fprintf(stderr, "Unable to get inital clock time: %s", strerror(errno));
 		exit_status = 1;
 	}
 	// spawn threads
@@ -164,7 +239,7 @@ int main(int argc, char** argv){
 	struct timespec diff;
 	timespec_subtract(&diff, &final_time, &init_time);
 	long long nsec_elapsed = diff.tv_sec*1000000000 + diff.tv_nsec;
-	fprintf(stdout, "%s,%d,%d,%lld,%lld,%lld,%lld\n", program_name, thread_count, iterations, op_count , nsec_elapsed, nsec_elapsed/op_count, counter);
+	fprintf(stdout, "%s,%d,%d,%lld,%lld,%lld,%lld\n", program_name, thread_count, iterations, op_count, nsec_elapsed, nsec_elapsed/op_count, counter);
 	free(threads);
 	return exit_status;
 }

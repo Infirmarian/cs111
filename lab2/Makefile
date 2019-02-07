@@ -4,29 +4,42 @@
 
 CC=gcc
 FLAGS=-Wall -Wextra -pthread
-pname=lab2
+exe1=lab2_add
+exe2=lab2_list
 tarname=lab2a-104916969.tar.gz
 
 
-build: $(pname)
-dist: lab2_add.c Makefile README tests.sh lab2_add.gp
-	tar -zcf $(tarname) lab2_add.c Makefile README tests.sh lab2_add.gp
+build: $(exe1) $(exe2)
+
+dist: lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h lab2_list.c
+	tar -zcf $(tarname) lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h lab2_list.c
 
 graphs: tests lab2_add.gp
 	gnuplot lab2_add.gp
 
-tests: $(pname) tests.sh
+tests: $(exe1) tests.sh
 	./tests.sh > lab2_add.csv
 
-$(pname): lab2_add.o
-	$(CC) $(FLAGS) -o $(pname) lab2_add.o
+$(exe1): lab2_add.o
+	$(CC) $(FLAGS) -o $(exe1) lab2_add.o
+
+$(exe2): lab2_list.o
+	$(CC) $(FLAGS) -o $(exe2) lab2_list.o
+
+
 lab2_add.o: lab2_add.c
 	$(CC) $(FLAGS) -c lab2_add.c
+
+lab2_list.o: lab2_list.c
+	$(CC) $(FLAGS) -c lab2_list.c
+
 debug:
-	$(CC) $(FLAGS) -g -o $(pname) lab2_add.c
+	$(CC) $(FLAGS) -g -o $(exe1) lab2_add.c
 clean:
-	$(RM) $(pname)
+	$(RM) $(exe1)
+	$(RM) $(exe2)
 	$(RM) $(tarname)
 	$(RM) lab2_add.o
+	$(RM) lab2_list.o
 	$(RM) lab2_add.csv
 	$(RM) lab2_add-*.png
