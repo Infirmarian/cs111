@@ -9,7 +9,9 @@
 #include <string.h>
 #include <errno.h>
 
-#define USED_CLOCK CLOCK_PROCESS_CPUTIME_ID
+#define USED_CLOCK CLOCK_REALTIME
+
+static int opt_yield=0;
 
 struct arg_struct {
 		long long* pointer;
@@ -42,6 +44,9 @@ int timespec_subtract (struct timespec *result, struct timespec *x, struct times
 
 void add(long long *pointer, long long value) {
 	long long sum = *pointer + value;
+	// yield if specified
+	if (opt_yield)
+        sched_yield();
 	*pointer = sum;
 }
 
@@ -64,12 +69,13 @@ int main(int argc, char** argv){
 	int thread_count = 1;
 	int iterations = 1;
 	int exit_status = 0;
-	char* program_name = "add-none";
+	char* program_name = "add-yield-none";
   
 	// struct for long options
 	static struct option long_options[] ={
 		{"threads", required_argument, 0, 't'},
 		{"iterations", required_argument, 0, 'i'},
+		{"yield", no_argument, 0, 'y'},
 		{0,0,0,0}
 	};
 	// iterate through each argument and assign the values if needed
@@ -84,6 +90,10 @@ int main(int argc, char** argv){
 				break;
 			case 'i':
 				iterations = atoi(optarg);
+				break;
+			case 'y':
+				opt_yield = 1;
+				program_name = "add-yield";
 				break;
 			case '?':
 				exit_status = 1;

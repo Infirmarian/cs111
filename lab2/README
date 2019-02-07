@@ -1,0 +1,20 @@
+NAME: Robert Geil
+EMAIL: rgeil@ucla.edu
+ID: 104916969
+
+Questions:
+2.1.1 - causing conflicts:
+    Why does it take many iterations before errors are seen?
+        With a small number of iterations (100), the tests provided a correct value of the counter,
+        when the number of threads was less than 10. Beyond that, for 1000+ iterations, all multi-threaded
+        executions generated an incorrect value, at least in these tests. It takes a large number of
+        iterations to cause errors because the chance of an individual error occurring is relatively low.
+        The point where the error occurs is between the load-add-store operations on the pointer value.
+        That means there are only 2 machine instructions where the value can be corrupted. This means that for
+        small values of iterations, it is very possible that no context switch occurs between the load-add-store,
+        meaning the program behaves "correctly". Adding more iterations makes it more likely that a race occurs.
+    Why does a significantly smaller number of iterations so seldom fail?
+        When there are only a few iterations, there are very few chances for a context switch to interrupt the
+        thread execution. For example, with 8 threads and 100 iterations, there are only ~3200 gaps in machine
+        instructions where an interrupt can occur to mess with race. However, increasing to 1000 iterations gives
+        32,000 opportunities for a context switch, which increases the likelihood of an error.
