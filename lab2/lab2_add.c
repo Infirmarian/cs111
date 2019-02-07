@@ -69,15 +69,16 @@ int main(int argc, char** argv){
 	int thread_count = 1;
 	int iterations = 1;
 	int exit_status = 0;
-	char* program_name = "add-yield-none";
-  
+	char program_name[16] = "add";
 	// struct for long options
 	static struct option long_options[] ={
 		{"threads", required_argument, 0, 't'},
 		{"iterations", required_argument, 0, 'i'},
 		{"yield", no_argument, 0, 'y'},
+		{"sync", required_argument, 0, 's'},
 		{0,0,0,0}
 	};
+	int is_using_lock = 0;
 	// iterate through each argument and assign the values if needed
   	while(1){
     	c = getopt_long(argc, argv, "", long_options, &option_index);
@@ -93,8 +94,21 @@ int main(int argc, char** argv){
 				break;
 			case 'y':
 				opt_yield = 1;
-				program_name = "add-yield";
+				strcpy(program_name, "add-yield");
 				break;
+			case 's':
+				switch(optarg[0]){
+					case 'm': // mutex lock
+					break;
+					case 's': // spin lock
+					break;
+					case 'c': // compare and swap
+					break;
+					default:
+						fprintf(stderr, "Bad option passed in for sync type\n");
+						exit_status = 1;
+				}
+			break;
 			case '?':
 				exit_status = 1;
 				break;
@@ -102,7 +116,9 @@ int main(int argc, char** argv){
 				exit(1);
 		}
   	}
-
+	if(!is_using_lock){
+		strcat(program_name, "-none");
+	}
 	  // allocate [thread] number
 	pthread_t* threads;
 	threads = calloc(thread_count, sizeof(pthread_t));

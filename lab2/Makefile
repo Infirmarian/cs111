@@ -5,18 +5,18 @@
 CC=gcc
 FLAGS=-Wall -Wextra -pthread
 pname=lab2
-tarname=lab2-104916969.tar.gz
+tarname=lab2a-104916969.tar.gz
 
 
 build: $(pname)
-dist: lab2_add.c Makefile README
-	tar -zcf $(tarname) lab2_add.c Makefile README
+dist: lab2_add.c Makefile README tests.sh lab2_add.gp
+	tar -zcf $(tarname) lab2_add.c Makefile README tests.sh lab2_add.gp
 
 graphs: tests lab2_add.gp
 	gnuplot lab2_add.gp
 
-tests: $(pname) runtest.sh
-	./runtest.sh > lab2_add.csv
+tests: $(pname) tests.sh
+	./tests.sh > lab2_add.csv
 
 $(pname): lab2_add.o
 	$(CC) $(FLAGS) -o $(pname) lab2_add.o
