@@ -50,7 +50,7 @@ int timespec_subtract (struct timespec *result, struct timespec *x, struct times
   return x->tv_sec < y->tv_sec;
 }
 
-void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool sync_spin, bool sync_compare, int spin_lock) {
+void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool sync_spin, bool sync_compare, volatile int* spin_lock) {
 	if(sync_mutex){
 		pthread_mutex_lock(&mutex);
 		long long sum = *pointer + value;
@@ -62,26 +62,30 @@ void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool 
 		return;
 	}
 	if(sync_spin){
-		while(__sync_lock_test_and_set(&spin_lock, 1)){
-			// complete the addition and store here, knowing we are the only thread accessing the pointer
-			long long sum = *pointer + value;
-			if(yield)
-				sched_yield();
-			*pointer = sum;
-			__sync_lock_release(&spin_lock);
-		}
+	 
+	  while(__sync_lock_test_and_set(spin_lock, 1)) // wait for the lock to be released
+	    continue;
+
+		long long sum = *pointer + value;
+		if(yield)
+			sched_yield();
+		*pointer = sum;
+		//printf("Done spinning, value is %lld\n", *pointer);
+		__sync_lock_release(spin_lock); //release the lock
+
 		return;
 	}
 	if(sync_compare){
 		long long new_sum;
 		long long current;
 		do{
-			current = *pointer;
-			new_sum = *pointer + value;
-			if(yield)
-				sched_yield();
+		  current = *pointer;
+		  new_sum = current + value;
+		  if(yield)
+			sched_yield();
 			
 		}while(__sync_val_compare_and_swap(pointer, current, new_sum) != current);
+		//printf("Done with compare, value is %lld\n", *pointer);
 		return;
 	}
 	// default, no synchronization
@@ -96,10 +100,10 @@ void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool 
 void* threaded_add(void* args){
 	struct arg_struct* a = (struct arg_struct*)args;
 	for(int i = 0; i<a->iterations; i++){
-		add(a->pointer, a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, a->spin_lock_value);
+	  add(a->pointer, a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, &(a->spin_lock_value));
 	}
 	for(int i = 0; i<a->iterations; i++){
-		add(a->pointer, -1*a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, a->spin_lock_value);
+	  add(a->pointer, -1*a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, &(a->spin_lock_value));
 	}
 	return 0;
 }

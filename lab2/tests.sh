@@ -41,3 +41,18 @@ for it in ${iterations[@]}; do
         ./$exe --threads=$thr --iterations=$it --sync=s --yield
     done
 done
+
+
+# Compare lock, without yield                                                                                                                                            
+for it in ${iterations[@]}; do
+    for thr in ${threads[@]}; do
+        ./$exe --threads=$thr --iterations=$it --sync=c
+    done
+done
+
+# Compare lock, with yield                                                                                                                                               
+for it in ${iterations[@]}; do
+    for thr in ${threads[@]}; do
+        ./$exe --threads=$thr --iterations=$it --sync=c --yield
+    done
+done
