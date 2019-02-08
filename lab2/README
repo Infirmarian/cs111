@@ -48,3 +48,15 @@ Questions:
         this isn't feasible on real machines, a "large" value, several orders of magnitude greater than the time of initializing the threads
         would suffice. It also should be sufficiently far from long long's max value to prevent overflow, as overflowing through race conditions
         will not provide as much meaningful information.
+2.1.4 - costs of serialization:
+    Why do all of the options perform similarly for low numbers of threads?
+        With a small number of threads, there are only a few processes attempting to access the shared memory locations, meaning that
+        there are only a few times when a lock needs to reject another thread attempting access. This means the CPU spends less time
+        spinning or waiting for locks, and therefore can efficiently run small numbers of threads without much impact on performance.
+    Why do the three protected operations slow down as the number of threads rises?
+        As the number of threads increases, there is still just one variable that can be accessed, but more threads attempting to
+        access it. For example, if thread 1 is holding the variable, the scheduler may cycle throught threads 2-12, each attempts to 
+        get the variable, but is forced to wait, meaning that there is a significant time spent cycling through other threads, while
+        just one thread can do work. The more threads that are spawned, the worse this problem becomes, with more and more threads
+        waiting for the memory to be unlocked. With the unlocked case, there are no restrictions on the memory, meaning that more
+        threads don't slow down the program, but do produce incorrect results.

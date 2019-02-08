@@ -35,8 +35,9 @@ lab2_list.o: lab2_list.c
 SortedList.o: SortedList.c
 	$(CC) $(FLAGS) -c SortedList.c
 
-debug:
+debug: lab2_add.c lab2_list.c SortedList.c
 	$(CC) $(FLAGS) -g -o $(exe1) lab2_add.c
+	$(CC) $(FLAGS) -g -o $(exe2) lab2_list.c SortedList.c
 clean:
 	$(RM) $(exe1)
 	$(RM) $(exe2)

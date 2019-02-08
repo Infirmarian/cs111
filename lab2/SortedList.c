@@ -4,6 +4,8 @@
 
 #include "SortedList.h"
 #include <string.h>
+#include <stdio.h>
+//TODO: Identify the critical sections and yield there
 /**
  * SortedList_insert ... insert an element into a sorted list
  *	The specified element will be inserted in to
@@ -13,9 +15,12 @@
  * @param SortedListElement_t *element ... element to be added to the list
  */
 void SortedList_insert(SortedList_t *list, SortedListElement_t *element){
+    // no elements to be inserted
     if(list->next == 0){
         list->next = element;
         element->prev = list;
+        element->next = 0;
+        return;
     }
     while(list->next){
         if(list->next->key < element->key){
@@ -31,6 +36,7 @@ void SortedList_insert(SortedList_t *list, SortedListElement_t *element){
     }
     list->next = element;
     element->prev = list;
+    element->next = 0;
 
 }
 /**
