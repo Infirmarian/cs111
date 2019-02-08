@@ -11,8 +11,8 @@ tarname=lab2a-104916969.tar.gz
 
 build: $(exe1) $(exe2)
 
-dist: lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h lab2_list.c
-	tar -zcf $(tarname) lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h lab2_list.c
+dist: lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h SortedList.c lab2_list.c
+	tar -zcf $(tarname) lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h SortedList.c lab2_list.c
 
 graphs: tests lab2_add.gp
 	gnuplot lab2_add.gp
@@ -23,8 +23,8 @@ tests: $(exe1) tests.sh
 $(exe1): lab2_add.o
 	$(CC) $(FLAGS) -o $(exe1) lab2_add.o
 
-$(exe2): lab2_list.o
-	$(CC) $(FLAGS) -o $(exe2) lab2_list.o
+$(exe2): lab2_list.o SortedList.o
+	$(CC) $(FLAGS) -o $(exe2) lab2_list.o SortedList.o
 
 
 lab2_add.o: lab2_add.c
@@ -32,6 +32,8 @@ lab2_add.o: lab2_add.c
 
 lab2_list.o: lab2_list.c
 	$(CC) $(FLAGS) -c lab2_list.c
+SortedList.o: SortedList.c
+	$(CC) $(FLAGS) -c SortedList.c
 
 debug:
 	$(CC) $(FLAGS) -g -o $(exe1) lab2_add.c
@@ -41,5 +43,6 @@ clean:
 	$(RM) $(tarname)
 	$(RM) lab2_add.o
 	$(RM) lab2_list.o
+	$(RM) SortedList.o
 	$(RM) lab2_add.csv
 	$(RM) lab2_add-*.png

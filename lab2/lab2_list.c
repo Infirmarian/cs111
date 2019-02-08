@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <stdlib.h>
+#include "SortedList.h"
+
 int main(int argc, char** argv){
     int exit_status = 0;
     static struct option long_options[] ={
