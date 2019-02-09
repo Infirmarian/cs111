@@ -5,6 +5,8 @@
 #include "SortedList.h"
 #include <string.h>
 #include <stdio.h>
+#include <sched.h>
+
 //TODO: Identify the critical sections and yield there
 /**
  * SortedList_insert ... insert an element into a sorted list
@@ -53,6 +55,8 @@ int SortedList_delete(SortedListElement_t *element){
     if((element->next && element->next->prev != element) || element->prev->next != element){
         return 1;
     }
+    if(opt_yield & DELETE_YIELD)
+        sched_yield();
     element->prev->next = element->next;
     element->next->prev = element->prev;
     return 0;
@@ -86,6 +90,8 @@ int SortedList_length(SortedList_t *list){
     while(list->next){
         if(list->next->prev != list)
             return -1;
+        if(opt_yield & LOOKUP_YIELD)
+            sched_yield();
         count ++;
         list = list ->next;
     }

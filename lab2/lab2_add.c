@@ -9,20 +9,23 @@
 #include <string.h>
 #include <errno.h>
 
-#define USED_CLOCK CLOCK_REALTIME
+#define USED_CLOCK CLOCK_MONOTONIC
 #define true 1
 #define false 0
 typedef int bool;
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+// define several locks to be used in a bitmask
+#define MUTEX_LOCK 0x1
+#define SPIN_LOCK 0x2
+#define SWAP_LOCK 0x4
+
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct arg_struct {
 		long long* pointer;
 		long long value;
 		int iterations;
-		bool sync_mutex;
-		bool sync_spin;
-		bool sync_compare;
+		int lock;
 		bool yield;
 		volatile int spin_lock_value;
 	};
@@ -50,8 +53,8 @@ int timespec_subtract (struct timespec *result, struct timespec *x, struct times
   return x->tv_sec < y->tv_sec;
 }
 
-void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool sync_spin, bool sync_compare, volatile int* spin_lock) {
-	if(sync_mutex){
+void add(long long *pointer, long long value, bool yield, int lock_type, volatile int* spin_lock) {
+	if(lock_type & MUTEX_LOCK){
 		pthread_mutex_lock(&mutex);
 		long long sum = *pointer + value;
 		// yield if specified
@@ -61,7 +64,7 @@ void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool 
 		pthread_mutex_unlock(&mutex);
 		return;
 	}
-	if(sync_spin){
+	if(lock_type & SPIN_LOCK){
 	 
 	  while(__sync_lock_test_and_set(spin_lock, 1)) // wait for the lock to be released
 	    continue;
@@ -75,7 +78,7 @@ void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool 
 
 		return;
 	}
-	if(sync_compare){
+	if(lock_type & SWAP_LOCK){
 		long long new_sum;
 		long long current;
 		do{
@@ -100,10 +103,10 @@ void add(long long *pointer, long long value, bool yield, bool sync_mutex, bool 
 void* threaded_add(void* args){
 	struct arg_struct* a = (struct arg_struct*)args;
 	for(int i = 0; i<a->iterations; i++){
-	  add(a->pointer, a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, &(a->spin_lock_value));
+	  add(a->pointer, a->value, a->yield, a->lock, &(a->spin_lock_value));
 	}
 	for(int i = 0; i<a->iterations; i++){
-	  add(a->pointer, -1*a->value, a->yield, a->sync_mutex, a->sync_spin, a->sync_compare, &(a->spin_lock_value));
+	  add(a->pointer, -1*a->value, a->yield, a->lock, &(a->spin_lock_value));
 	}
 	return 0;
 }
@@ -176,18 +179,16 @@ int main(int argc, char** argv){
 		program_name[len+1] = lock;
 		program_name[len+2] = '\0';
 	}
-	bool sync_mutex = false;
-	bool sync_spin = false;
-	bool sync_compare = false;
+	int lock_code = 0;
 	switch(lock){
 		case 'm':
-			sync_mutex = true;
+			lock_code = MUTEX_LOCK;
 			break;
 		case 's':
-			sync_spin = true;
+			lock_code = SPIN_LOCK;
 			break;
 		case 'c':
-			sync_compare = true;
+			lock_code = SWAP_LOCK;
 			break;
 		default:
 		break;
@@ -205,9 +206,7 @@ int main(int argc, char** argv){
 		.iterations = iterations,
 		.pointer = &counter,
 		.value = 1,
-		.sync_mutex = sync_mutex,
-		.sync_spin = sync_spin,
-		.sync_compare = sync_compare,
+		.lock = lock_code,
 		.yield = opt_yield,
 		.spin_lock_value = 0
 	};
@@ -234,7 +233,7 @@ int main(int argc, char** argv){
 		}
 	}
 	//get clock ending time
-	if(clock_gettime(USED_CLOCK,&final_time)){
+	if(clock_gettime(USED_CLOCK, &final_time)){
 		fprintf(stderr, "Unable to get final clock time: %s", strerror(errno));
 		exit_status = 1;
 	}
