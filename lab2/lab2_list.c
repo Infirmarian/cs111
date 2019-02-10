@@ -20,10 +20,9 @@ typedef int bool;
 // define several locks to be used in a bitmask
 #define MUTEX_LOCK 0x1
 #define SPIN_LOCK 0x2
-#define SWAP_LOCK 0x4
 
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
+static volatile int spin_lock = 0;
 struct list_arguments{
     int locks;
     SortedList_t* list;
@@ -66,8 +65,12 @@ void add_to_list(SortedList_t* list, SortedListElement_t* element, int lock_flag
         pthread_mutex_unlock(&mutex);
         return;
     }
-    if(lock_flags & SWAP_LOCK){
-        //TODO
+    if(lock_flags & SPIN_LOCK){
+        while(__sync_lock_test_and_set(&spin_lock, 1))
+            continue;
+        SortedList_insert(list, element);
+        __sync_lock_release(&spin_lock);
+        return;
     }
     SortedList_insert(list, element);
 }
@@ -79,8 +82,12 @@ SortedListElement_t* lookup(SortedList_t* list, const char* key, int lock_flags)
         pthread_mutex_unlock(&mutex);
         return element;
     }
-    if(lock_flags & SWAP_LOCK){
-        //TODO
+    if(lock_flags & SPIN_LOCK){
+        while(__sync_lock_test_and_set(&spin_lock, 1))
+            continue;
+        element = SortedList_lookup(list, key);
+        __sync_lock_release(&spin_lock);
+        return element;
     }
     return SortedList_lookup(list, key);
 }
@@ -92,8 +99,12 @@ int delete(SortedListElement_t* element, int lock_flags){
         pthread_mutex_unlock(&mutex);
         return rval;
     }
-    if(lock_flags & SWAP_LOCK){
-        //TODO
+    if(lock_flags & SPIN_LOCK){
+        while(__sync_lock_test_and_set(&spin_lock, 1))
+            continue;
+        rval = SortedList_delete(element);
+        __sync_lock_release(&spin_lock);
+        return rval;
     }
     return SortedList_delete(element);
 }
@@ -190,7 +201,7 @@ int main(int argc, char** argv){
             case 's':
                 switch(optarg[0]){
                     case 's':
-                        sync_type = SWAP_LOCK;
+                        sync_type = SPIN_LOCK;
                         break;
                     case 'm':
                         sync_type = MUTEX_LOCK;
@@ -238,7 +249,7 @@ int main(int argc, char** argv){
             program_name[l++] = 'm';
             program_name[l] = 0;
         }
-        if(sync_type & SWAP_LOCK){
+        if(sync_type & SPIN_LOCK){
             program_name[l++] = 's';
             program_name[l] = 0;
         }
@@ -350,12 +361,14 @@ int main(int argc, char** argv){
     }
 
     if(clock_gettime(CLOCK_REALTIME,&final_time)){
-		fprintf(stderr, "Unable to get final clock time: %s", strerror(errno));
+		fprintf(stderr, "Unable to get final clock time: %s\n", strerror(errno));
 		exit_status = 1;
 	}
 
-    if(SortedList_length(list))
+    if(SortedList_length(list)){
+        fprintf(stderr, "List was not completely removed, indicating corrupted list\n");
         exit_status = 2;
+    }
 
     // Print results here
     long long nsec = 0;

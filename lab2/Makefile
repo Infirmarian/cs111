@@ -14,11 +14,13 @@ build: $(exe1) $(exe2)
 dist: lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h SortedList.c lab2_list.c
 	tar -zcf $(tarname) lab2_add.c Makefile README tests.sh lab2_add.gp SortedList.h SortedList.c lab2_list.c
 
-graphs: tests lab2_add.gp
+graphs: tests lab2_add.gp lab2_list.gp
 	gnuplot lab2_add.gp
+	gnuplot lab2_list.gp
 
-tests: $(exe1) tests.sh
-	./tests.sh > lab2_add.csv
+tests: $(exe1) $(exe2) gen_add_csv.sh gen_list_csv.sh
+	./gen_add_csv.sh > lab2_add.csv
+	./gen_list_csv.sh > lab2_list.csv
 
 $(exe1): lab2_add.o
 	$(CC) $(FLAGS) -o $(exe1) lab2_add.o
