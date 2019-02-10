@@ -119,7 +119,7 @@ int main(int argc, char** argv){
 	int thread_count = 1;
 	int iterations = 1;
 	int exit_status = 0;
-	bool opt_yield;
+	bool opt_yield = 0;
 	char program_name[16] = "add";
 	// struct for long options
 	static struct option long_options[] ={
