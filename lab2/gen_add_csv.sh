@@ -35,14 +35,14 @@ for it in 10 20 40 80 100 1000 10000; do
 done
 
 # Spin lock, without yield
-for it in 10 20 40 80 100 1000; do
+for it in 10 20 40 80 100 1000 10000; do
     for thr in ${threads[@]}; do
         $exe --threads=$thr --iterations=$it --sync=s
     done
 done
 
 # Spin lock, with yield
-for it in 10 20 40 80 100 1000; do
+for it in 10 20 40 80 100 1000 10000; do
     for thr in ${threads[@]}; do
         $exe --threads=$thr --iterations=$it --sync=s --yield
     done
