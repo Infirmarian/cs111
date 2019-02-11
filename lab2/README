@@ -2,22 +2,106 @@ NAME: Robert Geil
 EMAIL: rgeil@ucla.edu
 ID: 104916969
 
+Lab 2A - Races and Synchronization
+
+Included files:
+    - lab2_add.c
+        Source file for a multithreaded variable update program
+    - lab2_list.c
+        Source file for a multithreaded linked list update program
+    - SortedList.c
+        Source file for an implementation of a sorted linked list
+    - SortedList.h
+        Header file for SortedList.c
+    - Makefile
+        Makefile with options to make distribution (make dist), run checks (make tests), generate graphs (make graphs)
+        and clean up (make clean)
+    - README
+        A text file containing a description of program functionality and answers to questions
+    - gen_add_csv.sh
+        A shell script to run a series of tests on lab2_add
+    - gen_list_csv.sh
+        A shell script to run a series of tests on lab2_list
+    - lab2_add.gp
+        A gnuplot program to generate a series of plots based on data from lab2_add
+    - lab2_list.gp
+        A gnuplot program to generate a series of plots based on data from lab2_list
+    - lab2_add.csv
+        A CSV file containing the results of the tests from lab2_add
+    - lab2_list.csv
+        A CSV file containing the results of the tests from lab2_list
+    - lab2_add-[1-5].png
+        A 5 PNG images containing the plotted results of lab2_add.csv
+    - lab2_list-[1-4].png
+        A 4 PNG images containing the plotted results of lab2_list.csv
+
+Program Description:
+    The two programs generated from the default build are lab2_add and lab2_list. These programs perform some multithreaded 
+    function and take in some user input.
+    - lab2_add:
+        This program performs additions and subtractions from a shared variable, either with or without several types of locks.
+        Options:
+        --iterations=N
+            Perform N additions and subtractions to a shared variable
+        --threads=N
+            Create N threads to perform additions and subtractions
+        --yield
+            Force each thread to yield control of the CPU at the critical section of addition/subtraction
+        --sync=[msc]
+            Synchronization each thread with either a m=Mutex, s=Spin, c=Compare and Swap lock to prevent race conditions
+        
+        Output:
+        This program output a line upon completion which can be appended to a CSV file, in the following form
+        name of test,#threads,#iterations,#total operations,total runtime,runtime per operation,final variable value
+    
+    - lab2_list:
+        This program performs insertions, lookup, deletions and length calculations on a shared linked list, with or without locks
+        Options:
+        --iterations=N
+            Insert and delete N elements into the list
+        --threads=N
+            Create N threads to perform insertions and deletions
+        --yield=[idl]
+            Yield the CPU between each i=insertions, d=deletion, l=lookup. These can be specified in any combination
+        --sync=[ms]
+            Synchronization each thread with either a m=Mutex or s=Spin lock to prevent race conditions
+        
+        Output:
+        This program either generates correct output, as shown below, or in the case of a corrupted list (due to a race condition)
+        prints out an error message and immediately exits with code 2. Normal output is in the form
+        name of test,#threads,#iterations,#total operations,total runtime,runtime per operation
+
+    Return codes for both functions are as follows:
+        0: Success
+        1: Failed system call or invalid command line argument
+        2: Other error (especially corrupted list due to race conditions)
+
+Limitations and Features:
+    One feature of this program is good memory management. Using valgrind, this program was checked for leaks under most normal conditions,
+    meaning that all allocated memory is freed just before exit of the program. Some limitations are the lack of an independent testing
+    script, meaning that the provided sanity check has to suffice for all testing. In addition, the structure of the Makefile could be
+    improved for clarity.
+
+Documentation from https://gcc.gnu.org/onlinedocs/gcc-4.4.3/gcc/Atomic-Builtins.html was used in order to run synchronization operations,
+and extensive man page documentation was used, especially for pthreads and malloc. In addition, a function to subtract times was found at
+https://www.gnu.org/software/libc/manual/html_node/Elapsed-Time.html and then lightly modified to support timespec rather than timeval.
+
+
 Questions:
 2.1.1 - causing conflicts:
     Why does it take many iterations before errors are seen?
         With a small number of iterations (100), the tests provided a correct value of the counter,
         when the number of threads was less than 10. Beyond that, for 1000+ iterations, all multi-threaded
-        executions generated an incorrect value, at least in these tests. It takes a large number of
-        iterations to cause errors because the chance of an individual error occurring is relatively low.
-        The point where the error occurs is between the load-add-store operations on the pointer value.
-        That means there are only 2 machine instructions where the value can be corrupted. This means that for
-        small values of iterations, it is very possible that no context switch occurs between the load-add-store,
-        meaning the program behaves "correctly". Adding more iterations makes it more likely that a race occurs.
+        executions generated an incorrect value, at least in these tests. If there are only a few additions
+        and subtractions to complete, it is likely that a thread completes all its operations before another thread
+        is spawned, meaning that there will never be two threads active at the same time. By increasing the number
+        of operations, it makes it more likely that threads 2-n will begin before threads 1 is completed, meaning there
+        will be a higher chance of a race condition.
     Why does a significantly smaller number of iterations so seldom fail?
-        When there are only a few iterations, there are very few chances for a context switch to interrupt the
-        thread execution. For example, with 8 threads and 100 iterations, there are only ~3200 gaps in machine
-        instructions where an interrupt can occur to mess with race. However, increasing to 1000 iterations gives
-        32,000 opportunities for a context switch, which increases the likelihood of an error.
+        When there are only a few iterations, each threads quickly completes it's work, and finishes before another thread
+        begins work. This means that as long as the thread's time to complete is less than the time to spawn a new thread,
+        there won't be a race condition. Once the number of iterations increases up to 1000 or more, the first thread has
+        other threads to compete against, causing a race where the value gets corrupted.
 2.1.2 - cost of yielding:
     Why are the --yield runs so much slower?
         Yield runs much slower because, in addition to the main program work of incrementing and decrementing a variable,
@@ -60,3 +144,35 @@ Questions:
         just one thread can do work. The more threads that are spawned, the worse this problem becomes, with more and more threads
         waiting for the memory to be unlocked. With the unlocked case, there are no restrictions on the memory, meaning that more
         threads don't slow down the program, but do produce incorrect results.
+2.2.1 - scalability of Mutex
+    Compare the variation in time per mutex-protected operation vs the number of threads in Part-1 (adds) and Part-2 (sorted lists).
+        In the data for list_add, as plotted in lab2_add-5.png, the mutex lock increases its cost per operation for increasing threads
+        from 1 to 2 to 4, before beginning to level off. The curve of the graph shows a limit as threads increase of around 200-300 ns
+        per operation. In contrast, the length-adjusted cost per operation for the add functionality increases exponentially with the 
+        mutex lock. This indicates that this solution won't scale well for increasingly long lists.
+    Comment on the general shapes of the curves, and explain why they have this shape.
+        The shape of the mutex lock cost-per-operation for the lab2_add function increases with a linear behavior in relation to thread
+        count. This is because as more threads are spawned, initially with low numbers, there is a lot of overhead for
+        they type of yielding that mutex locks perform, but as more threads are spawned, the yielding between thread is a relatively
+        constant cost. By comparison, the graph of cost per operation for lab2_list increases exponentially with increasing threads. This
+        is likely because with the operations on the list, there is much greater time to complete the task, meaning that each thread remains
+        locked for longer, growing with the number of threads.
+    Comment on the relative rates of increase and differences in the shapes of the curves, and offer an explanation for these differences.
+        The rate of increase for both of curves is large at low numbers of threads, but as number of threads grows larger than 4 or so for
+        add, the cost begins to level out, as there is a fairly linear cost of yielding, since each operation that is waited for is quite fast.
+        By comparison, the rate of growth of the lab2_list does not slow, and maintains exponential trends. This is likely because each 
+        individual operation (eg time to go through list) is much higher, meaning that other threads have to be locked for longer as 
+        thread count increases.
+2.2.2 - scalability of spin locks
+    Compare the variation in time per protected operation vs the number of threads for list operations protected by Mutex vs Spin locks. 
+    Comment on the general shapes of the curves, and explain why they have this shape.
+        For the operations on lab2_list, there is a fairly comparable graph curve of both Mutex and Spin locks. Both of adjusted time
+        per operation values increase exponentially with an increase in number of threads, but the rate of increase is higher for the 
+        Spin locks as compared to the Mutex locks. This is because of how the two locks operate. Mutex locks yield until the lock can
+        be acquired, meaning that another thread that holds the lock can quickly jump in and do operations. Spin locks on the other hand
+        will try to set a lock, and if that fails, simply "spin" by doing nothing then attempting to set the lock again. This utilizes 
+        CPU time, meaning that there is less time yielded to other threads to do useful work.
+    Comment on the relative rates of increase and differences in the shapes of the curves, and offer an explanation for these differences.
+        Because of the differences in how the two lock mechanisms work, spin locks use more resources and yield the CPU less often than
+        Mutex locks, meaning that they will take longer to complete the same task. Simply put, more time in a program with spin locks is 
+        being spent running the CPU and waiting for a lock, rather than yielding to whichever process currently holds the lock.

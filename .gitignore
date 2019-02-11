@@ -2,6 +2,7 @@
 *.tar.gz
 *~
 .vscode/
+*.o
 
 #lab0
 functions.sh
@@ -11,6 +12,7 @@ simpsh
 
 
 #Lab2
-*.o
 lab2_add
 lab2_list
+lab2_*.png
+lab2_*.csv

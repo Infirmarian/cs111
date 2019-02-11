@@ -109,13 +109,32 @@ int delete(SortedListElement_t* element, int lock_flags){
     return SortedList_delete(element);
 }
 
+int length(SortedList_t* list, int lock_flags){
+    int len = 0;
+    if(lock_flags & MUTEX_LOCK){
+        pthread_mutex_lock(&mutex);
+        len = SortedList_length(list);
+        pthread_mutex_unlock(&mutex);
+        return len;
+    }
+    if(lock_flags & SPIN_LOCK){
+        while(__sync_lock_test_and_set(&spin_lock, 1))
+            continue;
+        len = SortedList_length(list);
+        __sync_lock_release(&spin_lock);
+        return len;
+    }
+    return SortedList_length(list);
+}
+
+
 // the actual threaded function
 void* threaded_function_run(void* args){
     struct list_arguments* a = (struct list_arguments*) args;
     for(int i = 0; i<a->count; i++){
         add_to_list(a->list, a->elements[i], a->locks);
     }
-    if(SortedList_length(a->list) == -1){
+    if(length(a->list, a->locks) == -1){
         fprintf(stderr, "Unable to get list length due to corrupted pointers, exiting\n");
         exit(2);
     }
