@@ -13,21 +13,21 @@ build: $(exe)
 dist: Makefile README lab2_list.gp SortedList.h SortedList.c lab2_list.c
 	tar -zcf $(tarname) Makefile README lab2_list.gp SortedList.h SortedList.c lab2_list.c
 
-graphs: lab2_add_plot lab2_list_plot
-
-lab2_add_plot: lab2_add.csv lab2_add.gp
-	gnuplot lab2_add.gp
-
-lab2_list_plot: lab2_list.csv lab2_list.gp
-	gnuplot lab2_list.gp
+graphs: lab2_list_plot
 
 tests: lab2b_list.csv
 
-lab2b_list.csv: $(exe) gen_list_csv.sh
-	./gen_list_csv.sh > lab2b_list.csv 2>/dev/null
+profile: $(exe)
+	CPUPROFILE=profile.out ./$(exe) --iterations=1000 --threads=12 --sync=s
+
+lab2b_list.csv: $(exe) gen_csv.sh
+	./gen_csv.sh > lab2b_list.csv 2>/dev/null
+
+lab2_list_plot: lab2_list.csv lab2b_list.gp
+	gnuplot lab2b_list.gp
 
 $(exe): lab2_list.o SortedList.o
-	$(CC) $(FLAGS) -o $(exe) lab2_list.o SortedList.o
+	$(CC) $(FLAGS) -o $(exe) lab2_list.o SortedList.o -lprofiler
 
 lab2_list.o: lab2_list.c
 	$(CC) $(FLAGS) -c lab2_list.c

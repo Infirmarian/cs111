@@ -1,0 +1,36 @@
+NAME: Robert Geil
+EMAIL: rgeil@ucla.edu
+ID: 104916969
+
+
+Questions:
+2.3.1 - CPU time in the basic list implementation:
+    Where do you believe most of the CPU time is spent in the 1 and 2-thread list tests?
+        I think that in the one and two thread lists, the majority of the CPU execution
+        time is spent on list traversal, rather than on the insertion and deletion,
+        especially as the list grows.
+    Why do you believe these to be the most expensive parts of the code?
+        I believe that list traversal is more expensive that insertion and deletion, because
+        to insert and/or delete, once the node has been located, it is only a few machine
+        instructions to switch around the pointers. However, in order to get to those locations,
+        up to N instructions may be needed, where N is the length of the list. In addition, most
+        time isn't going to synchronization of the threads because with only one or two threads
+        active at a given moment, there isn't much contention for locks, so most threads are doing
+        meaningful work.
+    Where do you believe most of the CPU time is being spent in the high-thread spin-lock tests?
+        In the high-thread spin-lock test case, I think that most of the CPU time is going to 
+        "spinning" while waiting for the lock to be acquired. Since the entire list is locked when
+        any given thread is accessing, inserting or deleting, all other threads, when set by the
+        scheduler, simply spin, waiting for the list to be unlocked. This contributes to the much
+        lower throughput as the number of threads increases, as there are more threads that are simply
+        spinning while waiting for their turn.
+    Where do you believe most of the CPU time is being spent in the high-thread mutex tests?
+        I believe that in high-thead mutex tests, a large amount of CPU time is used for context
+        switching between threads. When pthread_mutex_lock() is unable to acquire the lock, the
+        thread is blocked, and therefore must wait for another thread to unlock. The thread that
+        is attempting to lock will then yield, causing a context switch for another thread to run.
+        However, because the scheduler naively chooses another thread to run, it is also likely that
+        that thread is locked, meaning that several context switches may be needed before whichever
+        thread that currently holds the list is choosen and can continue execution. In addition, 
+        because only one thread can hold the lock, as the number of threads increase, an issue of
+        scaling follows, lowering throughput as a function of thread count.
