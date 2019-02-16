@@ -5,13 +5,14 @@
 CC=gcc
 FLAGS=-Wall -Wextra -pthread
 exe=lab2_list
-tarname=lab2a-104916969.tar.gz
+tarname=lab2b-104916969.tar.gz
 
 
 build: $(exe)
 
-dist: Makefile README lab2_list.gp SortedList.h SortedList.c lab2_list.c
-	tar -zcf $(tarname) Makefile README lab2_list.gp SortedList.h SortedList.c lab2_list.c
+dist: Makefile README lab2b_list.gp SortedList.h SortedList.c lab2_list.c utils.c utils.h gen_csv.sh lab2b_list.csv graphs
+	tar -zcf $(tarname) Makefile README lab2b_list.gp SortedList.h SortedList.c \
+	lab2_list.c utils.c utils.h lab2b_[1-5].png lab2b_list.csv gen_csv.sh
 
 graphs: lab2b_list_plot
 
