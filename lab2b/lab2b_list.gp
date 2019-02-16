@@ -29,6 +29,7 @@ set title "Operation and Wait Time as a Function of Threads"
 set xlabel "Threads"
 set output "lab2b_2.png"
 set ylabel "Time (Nanoseconds)"
+set logscale y 10
 
 plot \
      "< grep 'list-none-m,' lab2b_list.csv" using ($2):($8) \

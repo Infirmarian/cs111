@@ -30,8 +30,8 @@ lab2b_list.csv: $(exe) gen_csv.sh
 lab2b_list_plot: lab2b_list.csv lab2b_list.gp
 	gnuplot lab2b_list.gp
 
-$(exe): lab2_list.c SortedList.c
-	$(CC) $(FLAGS) -o $(exe) lab2_list.c SortedList.c -lprofiler
+$(exe): lab2_list.o SortedList.o utils.o
+	$(CC) $(FLAGS) -o $(exe) lab2_list.o SortedList.o utils.o -lprofiler
 
 lab2_list.o: lab2_list.c
 	$(CC) $(FLAGS) -c lab2_list.c
@@ -39,11 +39,15 @@ lab2_list.o: lab2_list.c
 SortedList.o: SortedList.c
 	$(CC) $(FLAGS) -c SortedList.c
 
-debug: lab2_list.c SortedList.c
-	$(CC) $(FLAGS) -g -o $(exe2) lab2_list.c SortedList.c
+utils.o: utils.c
+	$(CC) $(FLAGS) -c utils.c
+
+debug: lab2_list.c SortedList.c utils.c
+	$(CC) $(FLAGS) -g -o $(exe) lab2_list.c SortedList.c utils.c
 
 clean:
 	$(RM) $(exe)
 	$(RM) $(tarname)
 	$(RM) lab2_list.o
 	$(RM) SortedList.o
+	$(RM) utils.o
