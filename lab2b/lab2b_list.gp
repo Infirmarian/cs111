@@ -8,7 +8,7 @@ set terminal png
 set datafile separator ","
 
 ### Format of the CSV file ###
-# test,#threads,#iterations,#total operations,total runtime,runtime per operation
+# test,#threads,#iterations,List Count, #total operations,total runtime,runtime per operation, average wait time
 
 # List 1: Operations Per Second of Spin and Mutex locks
 # Output: lab2b_1.png
@@ -24,3 +24,14 @@ plot \
      "< grep 'list-none-m,' lab2b_list.csv" using ($2):(1000000000/$7) \
 	title 'Mutex' with linespoints lc rgb 'green'
 
+# List 2: 
+set title "Operation and Wait Time as a Function of Threads"
+set xlabel "Threads"
+set output "lab2b_2.png"
+set ylabel "Time (Nanoseconds)"
+
+plot \
+     "< grep 'list-none-m,' lab2b_list.csv" using ($2):($8) \
+	title 'Wait for Lock Time' with linespoints lc rgb 'green', \
+     "< grep 'list-none-m,' lab2b_list.csv" using ($2):($7) \
+	title 'Average Time Per Operation' with linespoints lc rgb 'purple'

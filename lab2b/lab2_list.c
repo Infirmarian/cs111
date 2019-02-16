@@ -29,6 +29,7 @@ struct list_arguments{
     // yielding is done with an extern variable in SortedList.c
     int count;
     SortedListElement_t** elements;
+    long long wait_time;
 };
 // assistant function to print out a list
 void printList(SortedList_t* list){
@@ -39,6 +40,13 @@ void printList(SortedList_t* list){
     }
     fprintf(stdout, "\n");
     fflush(stdout);
+}
+
+long long nsec_difference(struct timespec* begin, struct timespec* end){
+    long long diff = end->tv_sec - begin->tv_sec;
+    diff *= 1e9;
+    diff += end->tv_nsec - begin->tv_nsec;
+    return diff;
 }
 
 char* generate_and_allocate_random_string(int length, int* success){
@@ -58,73 +66,98 @@ char* generate_and_allocate_random_string(int length, int* success){
     return value;
 }
 
-void add_to_list(SortedList_t* list, SortedListElement_t* element, int lock_flags){
+void add_to_list(SortedList_t* list, SortedListElement_t* element, int lock_flags, long long* wait_time){
+    struct timespec begin, end;
     if(lock_flags & MUTEX_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         pthread_mutex_lock(&mutex);
+        clock_gettime(CLOCK_REALTIME,&end);
         SortedList_insert(list, element);
         pthread_mutex_unlock(&mutex);
-        return;
     }
     if(lock_flags & SPIN_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         while(__sync_lock_test_and_set(&spin_lock, 1))
             continue;
+        clock_gettime(CLOCK_REALTIME,&end);
         SortedList_insert(list, element);
         __sync_lock_release(&spin_lock);
+    }
+    if(!lock_flags){
+        SortedList_insert(list, element);
         return;
     }
-    SortedList_insert(list, element);
+    (*wait_time) += nsec_difference(&begin, &end);
 }
-SortedListElement_t* lookup(SortedList_t* list, const char* key, int lock_flags){
+SortedListElement_t* lookup(SortedList_t* list, const char* key, int lock_flags, long long* wait_time){
+    struct timespec begin, end;
     SortedListElement_t* element;
     if(lock_flags & MUTEX_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         pthread_mutex_lock(&mutex);
+        clock_gettime(CLOCK_REALTIME,&end);
         element = SortedList_lookup(list, key);
         pthread_mutex_unlock(&mutex);
-        return element;
     }
     if(lock_flags & SPIN_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         while(__sync_lock_test_and_set(&spin_lock, 1))
             continue;
+        clock_gettime(CLOCK_REALTIME,&end);
         element = SortedList_lookup(list, key);
         __sync_lock_release(&spin_lock);
-        return element;
     }
-    return SortedList_lookup(list, key);
+    if(!lock_flags)
+        return SortedList_lookup(list, key);
+    (*wait_time) += nsec_difference(&begin, &end);
+    return element;
 }
-int delete(SortedListElement_t* element, int lock_flags){
+int delete(SortedListElement_t* element, int lock_flags, long long* wait_time){
+    struct timespec begin, end;
     int rval = 0;
     if(lock_flags & MUTEX_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         pthread_mutex_lock(&mutex);
+        clock_gettime(CLOCK_REALTIME,&end);
         rval = SortedList_delete(element);
         pthread_mutex_unlock(&mutex);
-        return rval;
     }
     if(lock_flags & SPIN_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         while(__sync_lock_test_and_set(&spin_lock, 1))
             continue;
+        clock_gettime(CLOCK_REALTIME,&end);
         rval = SortedList_delete(element);
         __sync_lock_release(&spin_lock);
-        return rval;
     }
-    return SortedList_delete(element);
+    if(!lock_flags)
+        return SortedList_delete(element);
+    (*wait_time) += nsec_difference(&begin, &end);
+    return rval;
 }
 
-int length(SortedList_t* list, int lock_flags){
+int length(SortedList_t* list, int lock_flags, long long* wait_time){
+    struct timespec begin, end;
     int len = 0;
     if(lock_flags & MUTEX_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         pthread_mutex_lock(&mutex);
+        clock_gettime(CLOCK_REALTIME,&end);
         len = SortedList_length(list);
         pthread_mutex_unlock(&mutex);
-        return len;
     }
     if(lock_flags & SPIN_LOCK){
+        clock_gettime(CLOCK_REALTIME,&begin);
         while(__sync_lock_test_and_set(&spin_lock, 1))
             continue;
+        clock_gettime(CLOCK_REALTIME,&end);
         len = SortedList_length(list);
         __sync_lock_release(&spin_lock);
-        return len;
     }
-    return SortedList_length(list);
+    if(!lock_flags)
+        return SortedList_length(list);
+    (*wait_time) += nsec_difference(&begin, &end);
+    return len;
 }
 
 
@@ -132,17 +165,17 @@ int length(SortedList_t* list, int lock_flags){
 void* threaded_function_run(void* args){
     struct list_arguments* a = (struct list_arguments*) args;
     for(int i = 0; i<a->count; i++){
-        add_to_list(a->list, a->elements[i], a->locks);
+        add_to_list(a->list, a->elements[i], a->locks, &a->wait_time);
     }
-    if(length(a->list, a->locks) == -1){
+    if(length(a->list, a->locks, &a->wait_time) == -1){
         fprintf(stderr, "Unable to get list length due to corrupted pointers, exiting\n");
         exit(2);
     }
     for(int i = 0; i<a->count; i++){
-        SortedListElement_t* todelete = lookup(a->list, a->elements[i]->key, a->locks);
+        SortedListElement_t* todelete = lookup(a->list, a->elements[i]->key, a->locks, &a->wait_time);
         int failed_delete = 0;
         if(todelete)
-            failed_delete += delete(todelete, a->locks);
+            failed_delete += delete(todelete, a->locks, &a->wait_time);
         else{
             fprintf(stderr, "Unable to locate element due to corrupted pointers, exiting\n");
             exit(2);
@@ -351,6 +384,7 @@ int main(int argc, char** argv){
         arg_pointer[i]->elements = all_elements+i*iteration_count;
         arg_pointer[i]->count = iteration_count;
         arg_pointer[i]->list = list;
+        arg_pointer[i]->wait_time = 0;
     }
 
     // Get clock starting time
@@ -362,7 +396,7 @@ int main(int argc, char** argv){
     for(int i = 0; i<thread_count; i++){
         struct list_arguments* value = arg_pointer[i];
 		if(pthread_create(&(threads[i]), 0, threaded_function_run, (void*)value)){
-            fprintf(stderr, "Unable to spawn more strings: %s\n", strerror(errno));
+            fprintf(stderr, "Unable to spawn more threads: %s\n", strerror(errno));
             if(fflush(stderr)){
                 fprintf(stderr, "Unable to flush stderr buffer: %s\n", strerror(errno));
             }
@@ -388,13 +422,18 @@ int main(int argc, char** argv){
         fprintf(stderr, "List was not completely removed, indicating corrupted list\n");
         exit_status = 2;
     }
+    long long wait_time = 0;
+    // Sum up the wait times for each thread
+    for(int i = 0; i<thread_count; i++){
+        wait_time += arg_pointer[i]->wait_time;
+    }
 
     // Print results here
     long long nsec = 0;
     nsec += 1e9*(final_time.tv_sec-init_time.tv_sec);
     nsec += final_time.tv_nsec - init_time.tv_nsec;
     long long op_count = thread_count * iteration_count * 3;
-    fprintf(stdout, "%s,%d,%d,%d,%lld,%lld,%lld\n", program_name, thread_count, iteration_count, 1, op_count, nsec, nsec/op_count);
+    fprintf(stdout, "%s,%d,%d,%d,%lld,%lld,%lld,%lld\n", program_name, thread_count, iteration_count, 1, op_count, nsec, nsec/op_count, wait_time/op_count);
     fflush(stdout);
 
     // delete the whole array of items and free memory associated with keys
