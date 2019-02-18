@@ -2,6 +2,72 @@ NAME: Robert Geil
 EMAIL: rgeil@ucla.edu
 ID: 104916969
 
+Lab 2A - Races and Synchronization
+
+Included files:
+    - lab2_list.c
+        Source file for a multithreaded linked list update program
+    - SortedList.c
+        Source file for an implementation of a sorted linked list
+    - SortedList.h
+        Header file for SortedList.c
+    - utils.c
+        Source file for utilities that were seperated out from lab2_list.c
+    - utils.h
+        Header file for utils.c
+    - Makefile
+        Makefile with options to make distribution (make dist), run checks (make tests), generate graphs (make graphs)
+        and clean up (make clean)
+    - README
+        A text file containing a description of program functionality and answers to questions
+    - gen_csv.sh
+        A shell script to run a series of tests on lab2_list
+    - lab2b_list.gp
+        A gnuplot program to generate a series of plots based on data from lab2_list
+    - lab2b_list.csv
+        A CSV file containing the results of the tests from lab2_list
+    - lab2b_[1-5].png
+        A 5 PNG images containing the plotted results of lab2b_list.csv
+    - profile.out
+        A result of gperftools analysis on the lab2_list
+
+Program Description:
+    lab2_list:
+        This program performs insertions, lookup, deletions and length calculations on a shared linked list, with or without locks
+        and with the option of a series of sublists
+        Options:
+        --iterations=N
+            Insert and delete N elements into the list
+        --threads=N
+            Create N threads to perform insertions and deletions
+        --yield=[idl]
+            Yield the CPU between each i=insertions, d=deletion, l=lookup. These can be specified in any combination
+        --sync=[ms]
+            Synchronization each thread with either a m=Mutex or s=Spin lock to prevent race conditions
+        --lists=N
+            Break up the list into N sublists, improving multithread performance
+        
+        Output:
+        This program either generates correct output, as shown below, or in the case of a corrupted list (due to a race condition)
+        prints out an error message and immediately exits with code 2. Normal output is in the form
+        name of test,#threads,#iterations,#total operations,total runtime,runtime per operation,wait time per operation
+
+    Return codes for both functions are as follows:
+        0: Success
+        1: Failed system call or invalid command line argument
+        2: Other error (especially corrupted list due to race conditions)
+
+Limitations and Features:
+    One feature of this program is good memory management. Using valgrind, this program was checked for leaks under most normal conditions,
+    meaning that all allocated memory is freed just before exit of the program. Some limitations are the lack of an independent testing
+    script, meaning that the provided sanity check has to suffice for all testing. In addition, the structure of the Makefile could be
+    improved for clarity.
+
+Documentation from https://gcc.gnu.org/onlinedocs/gcc-4.4.3/gcc/Atomic-Builtins.html was used in order to run synchronization operations,
+and extensive man page documentation was used, especially for pthreads and malloc. The hashing algorithm for breaking up
+lists into sublists was the djb2 algorithm, described at http://www.cse.yorku.ca/~oz/hash.html.
+
+
 
 Questions:
 2.3.1 - CPU time in the basic list implementation:
@@ -66,4 +132,22 @@ Questions:
         cause threads to yield as soon as they cannot acquire a lock, context switches increase as thread increase,
         and wait time goes up dramatically. However, the completion time is lower because meaningful work is still
         being done, albeit slowed by context switches.
+2.3.4 - Performance of Partitioned Lists
+    Explain the change in performance of the synchronized methods as a function of the number of lists.
+        As the list is broken into more pieces, the bottlenecking of a lock is distributed across the lists.
+        With multiple lists, multiple threads can do useful work at the same time, increasing throughput,
+        since the whole list doesn't need to be controlled by a single thread.
+    Should the throughput continue increasing as the number of lists is further increased? If not, explain why not.
+        Yes, there is a twofold reason for the increase in throughput as lists increase. Firstly, more lists
+        means that there is a lower probability of lock contention, where two threads attempt to acquire the same
+        lock (since the keys inserted are randomly generated, and the hashing function is good for distribution).
+        In addition, breaking up the list decreases traversal time to insert and lookup, as the complexity is
+        N/L, where N is the number of elements, and L the number of sublists, as compared to a complexity on the
+        order of N for just a single list.
+    It seems reasonable to suggest the throughput of an N-way partitioned list should be equivalent to 
+    the throughput of a single list with fewer (1/N) threads. Does this appear to be true in the above curves? 
+    If not, explain why not.
+        No, this isn't quite the case. Because with multiple lists there is still a chance for contention for
+        locks, there are still collisions that occur when inserting, meaning that the performance is still lower
+        than 1/N threads with a single list.
     
