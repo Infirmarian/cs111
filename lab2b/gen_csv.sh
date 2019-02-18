@@ -40,6 +40,23 @@ for it in ${iterations[@]}; do
     done
 done
 
+# Throughput timing with multiple lists
+threads=(1 2 4 8 12)
+lists=(1 4 8 16)
+iterations=1000
+# Mutex Locking
+for thread in ${threads[@]}; do
+    for listcount in ${lists[@]}; do
+        ./lab2_list --threads=$thread --iterations=$iterations --lists=$listcount --sync=m
+    done
+done
+
+# Spin Locking
+for thread in ${threads[@]}; do
+    for listcount in ${lists[@]}; do
+        ./lab2_list --threads=$thread --iterations=$iterations --lists=$listcount --sync=s
+    done
+done
 
 
 

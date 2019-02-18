@@ -34,3 +34,36 @@ Questions:
         thread that currently holds the list is choosen and can continue execution. In addition, 
         because only one thread can hold the lock, as the number of threads increase, an issue of
         scaling follows, lowering throughput as a function of thread count.
+
+2.3.2 - Execution Profiling:
+    Where (what lines of code) are consuming most of the CPU time when the spin-lock version of the 
+    list exerciser is run with a large number of threads?
+        When running my profiler with the --text option (and --threads=12, --sync=s), it shows that
+        the add_to_list function takes the most CPU time. Breaking down that function with 
+        --list=add_to_list, we see that more than three quarters of the time (in add_to_list) is spent 
+        on line 374, or the "spinning" line of the spin lock, where the threads attempt to acquire 
+        the lock. 
+    Why does this operation become so expensive with large numbers of threads?
+        As the number of threads increases, there is more lock-contention. Since only one thread can
+        hold the lock at a time, as the number of threads increase, each thread spends more time
+        hammering on the CPU attempting to reacquire the lock, and the amount of time spent on
+        line 374 (and the other spots in the program where locks are used) increases.
+2.3.3 - Mutex Wait Time:
+    Look at the average time per operation (vs. # threads) and the average wait-for-mutex time (vs. #threads).
+    Why does the average lock-wait time rise so dramatically with the number of contending threads?
+        As the number of threads increases, the wait time increases more sharply than linear growth. This is
+        due to the fact that as thread count increases, there is a two-fold slowdown on the computations.
+        One part is that more threads means that the chance of having to wait increases, since there is still only
+        one thread executing at a time. In addition, more threads means there is a larger queue of threads,
+        so once a thread loses the lock, there is a longer line to wait in to reacquire it.
+    Why does the completion time per operation rise (less dramatically) with the number of contending threads?
+        Since completion time is based on number of operations completed, increasing threads doesn't have as
+        dramatic an impact on the results. For example, while an individual thread may have to wait longer to
+        do work, there is still roughly one thread running at a time, meaning that the only slowdown for 
+        completion time is context switching.
+    How is it possible for the wait time per operation to go up faster (or higher) than the completion time per operation?
+        Even with multiple threads, there is still generally one thread doing meaningful work. Since mutex locks
+        cause threads to yield as soon as they cannot acquire a lock, context switches increase as thread increase,
+        and wait time goes up dramatically. However, the completion time is lower because meaningful work is still
+        being done, albeit slowed by context switches.
+    
