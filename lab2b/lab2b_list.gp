@@ -19,9 +19,9 @@ set logscale y 10
 set output 'lab2b_1.png'
 
 plot \
-     "< grep 'list-none-s,' lab2b_list.csv" using ($2):(1000000000/$7) \
+     "< grep 'list-none-s,' lab2b_list.csv | head -7" using ($2):(1000000000/$7) \
 	title 'Spin' with linespoints lc rgb 'blue', \
-     "< grep 'list-none-m,' lab2b_list.csv" using ($2):(1000000000/$7) \
+     "< grep 'list-none-m,' lab2b_list.csv | head -7" using ($2):(1000000000/$7) \
 	title 'Mutex' with linespoints lc rgb 'green'
 
 # List 2: 
@@ -32,9 +32,9 @@ set ylabel "Time (Nanoseconds)"
 set logscale y 10
 
 plot \
-     "< grep 'list-none-m,' lab2b_list.csv" using ($2):($8) \
+     "< grep 'list-none-m,' lab2b_list.csv | head -7" using ($2):($8) \
 	title 'Wait for Lock Time' with linespoints lc rgb 'green', \
-     "< grep 'list-none-m,' lab2b_list.csv" using ($2):($7) \
+     "< grep 'list-none-m,' lab2b_list.csv | head -7" using ($2):($7) \
 	title 'Average Time Per Operation' with linespoints lc rgb 'purple'
 
 
