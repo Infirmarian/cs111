@@ -2,15 +2,15 @@
 #EMAIL: rgeil@ucla.edu
 #ID: 104916969
 
-exe=lab3
+exe=lab3a
 CC=g++
 FLAGS=-Wall -Wextra
 distName=lab3a-104916969.tar.gz
 
 all: $(exe)
 
-dist: Makefile lab3.cpp
-	tar -czf $(distName) Makefile lab3.cpp
+dist: Makefile lab3.cpp utils.cpp utils.h README
+	tar -czf $(distName) Makefile lab3.cpp utils.cpp utils.h README
 
 $(exe): lab3.o utils.o
 	$(CC) $(FLAGS) -o $(exe) lab3.o utils.o
