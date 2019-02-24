@@ -12,9 +12,17 @@ all: $(exe)
 dist: Makefile lab3.cpp
 	tar -czf $(distName) Makefile lab3.cpp
 
-$(exe): lab3.cpp
-	$(CC) $(FLAGS) -o $(exe) lab3.cpp
+$(exe): lab3.o utils.o
+	$(CC) $(FLAGS) -o $(exe) lab3.o utils.o
+
+lab3.o: lab3.cpp
+	$(CC) $(FLAGS) -c lab3.cpp
+
+utils.o: utils.cpp
+	$(CC) $(FLAGS) -c utils.cpp
 
 clean:
 	$(RM) $(distName)
 	$(RM) $(exe)
+	$(RM) lab3.o
+	$(RM) utils.o
