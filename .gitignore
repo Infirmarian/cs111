@@ -16,3 +16,8 @@ lab2_add
 lab2_list
 lab2_*.png
 lab2_*.csv
+
+#Lab3
+# Disk image
+*.img
+fs
