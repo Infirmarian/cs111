@@ -8,7 +8,7 @@ typedef unsigned char byte;
 
 void Fflush(FILE* f);
 int Pread(int fd, void* ptr, size_t size, off_t offset);
-byte* read_block(int fd, int block_address, int block_size, int* error);
+byte* read_block(int fd, int block_address, int block_size, int& error);
 bool inode_is_free(std::vector<byte> inodes, int number);
 bool inode_is_free(byte* b, int number);
 bool block_is_free(std::vector<byte> blocks, int number);
