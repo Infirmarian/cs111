@@ -4,7 +4,7 @@
 
 exe=lab3a
 CC=g++
-FLAGS=-Wall -Wextra
+FLAGS=-Wall -Wextra -g
 distName=lab3a-104916969.tar.gz
 
 all: $(exe)

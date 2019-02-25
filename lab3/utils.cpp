@@ -10,7 +10,6 @@
 
 #include "utils.h"
 
-
 // Utility to cleanly flush and check an output
 void Fflush(FILE* f){
     if(fflush(f)){
@@ -25,4 +24,13 @@ int Pread(int fd, void* ptr, size_t size, off_t offset){
         return 1;
     }
     return 0;
+}
+
+// Read in a block, into a dynamically allocated array of "bytes"
+byte* read_block(int fd, int block_address, int block_size, int* error){
+    byte* block = new byte[block_size];
+    if(Pread(fd, block, sizeof(byte)*block_size, block_address*block_size)){
+        *error = *error + 1;
+    }
+    return block;
 }
