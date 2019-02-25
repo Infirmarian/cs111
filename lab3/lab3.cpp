@@ -8,23 +8,26 @@
 #include <fcntl.h>
 #include <string.h>
 #include <vector>
-
+#include <unordered_map>
 #include "utils.h"
 
 #define SUPERBLOCK_LOCATION 1
+#define INODE_TABLE_OFFSET 128
 
 static int BLOCK_SIZE = 1024;
 static byte* superblockdata = 0;
 struct groupData{
-    short free_block_count;
-    short free_inode_count;
-    int block_bitmap_address;
-    int inode_bitmap_address;
-    int first_inode_block;
-    int block_count;
-    int inode_count;
+    unsigned short free_block_count;
+    unsigned short free_inode_count;
+    unsigned int block_bitmap_address;
+    unsigned int inode_bitmap_address;
+    unsigned int first_inode_block;
+    unsigned int block_count;
+    unsigned int inode_count;
+    unsigned int inode_table_address;
 };
 std::vector<struct groupData*> groups;
+std::unordered_map<int, std::vector<byte>> groupInodeData;
 
 std::string getSuperblockData(int fd, int* error){
     // Located 1024 bytes from the beginning of the filesystem
@@ -86,6 +89,9 @@ std::string getGroupData(int fd, int groupNumber, int* error){
     d->block_count = block_count;
     d->inode_count = inode_count;
 
+    // Useful only for getting Inode directory, not printed out
+    d->inode_table_address = convert_bytes_to_type<int>(b, groupOffset + 8);
+
 
     result += std::to_string(groupNumber)+","+std::to_string(block_count)+","+std::to_string(inode_count)+
             ","+std::to_string(free_block_count)+","+ std::to_string(free_inode_count) + 
@@ -106,6 +112,7 @@ std::string getGroupData(int fd, int groupNumber, int* error){
 
 std::string getFreeBlockData(int fd, int groupNumber, int* error);
 std::string getFreeInodeData(int fd, int groupNumber, int* error);
+bool allInodes(int fd, int groupNumber, int* error);
 
 int main(int argc, char** argv){
     int exit_status = 0;
@@ -127,7 +134,7 @@ int main(int argc, char** argv){
     fprintf(stdout, "%s\n", getGroupData(img_fd, 0, &e).c_str()); // GROUP DATA
     fprintf(stdout, "%s", getFreeBlockData(img_fd, 0, &e).c_str()); // Block DATA
     fprintf(stdout, "%s", getFreeInodeData(img_fd, 0, &e).c_str()); // Inode DATA
-
+    allInodes(img_fd, 0, &e); // Data is printed within, to prevent a core dump due to "stack smashing"
     if(e > 0){
         exit_status = 1;
     }
@@ -149,20 +156,13 @@ int main(int argc, char** argv){
 // Return a string that represents each free block in the given group
 std::string getFreeBlockData(int fd, int groupNumber, int* error){
     std::string result = "";
-    int bitmap_pos = (groups[groupNumber])->block_bitmap_address;
     int block_count = groups[groupNumber]->block_count;
-    byte* b = read_block(fd, bitmap_pos, BLOCK_SIZE, error);
-    long long count = 1;
-    int shift = 0;
-    for(int i = 0; count <= block_count; i++){
-        for(int j = 0; j<8 && (i<<3)+j <= block_count; j++){
-            if(!(b[i] & (1 << shift))){
-                result += "BFREE,"+std::to_string(count)+"\n";
-            }
-            shift ++;
-            count++;
+    byte* b = read_block(fd, groups[groupNumber]->block_bitmap_address, BLOCK_SIZE, error);
+
+    for(int i = 1; i <= block_count; i++){
+        if(block_is_free(b, i)){
+            result += "BFREE,"+std::to_string(i)+"\n";
         }
-        shift = 0;
     }
 
     delete[] b;
@@ -172,22 +172,103 @@ std::string getFreeBlockData(int fd, int groupNumber, int* error){
 // Return a string that represents each free block in the given group
 std::string getFreeInodeData(int fd, int groupNumber, int* error){
     std::string result = "";
-    int bitmap_pos = (groups[groupNumber])->inode_bitmap_address;
     int inode_count = groups[groupNumber]->inode_count;
-    byte* b = read_block(fd, bitmap_pos, BLOCK_SIZE, error);
-    long long count = 1;
-    int shift = 0;
-    for(int i = 0; count <= inode_count; i++){
-        for(int j = 0; j<8 && count <= inode_count; j++){
-            if(!(b[i] & (1 << shift))){
-                result += "IFREE,"+std::to_string(count)+"\n";
-            }
-            shift ++;
-            count++;
+    byte* b = read_block(fd, groups[groupNumber]->inode_bitmap_address, BLOCK_SIZE, error);
+
+    for(int i = 1; i<=inode_count; i++){
+        if(inode_is_free(b, i)){
+            result += "IFREE,"+std::to_string(i)+"\n";
         }
-        shift = 0;
     }
 
     delete[] b;
     return result;
+}
+
+void inodeSummary(byte* block, int inode_number){
+    std::string result = "INODE,";
+    int offset = inode_number * INODE_TABLE_OFFSET;
+    unsigned short imode = convert_bytes_to_type<unsigned short>(block, offset+0);
+    if(!imode){
+        return;
+    }
+    unsigned short usermode = imode & 0x0FFF;
+    char filetype;
+    bool print_block_addresses = true;
+    switch(imode & 0xF000){
+        case 0x8000:
+        filetype = 'f';
+        break;
+        case 0x4000:
+        filetype = 'd';
+        break;
+        case 0xA000:
+        filetype = 's';
+        print_block_addresses = false;
+        break;
+        default:
+        filetype = '?';
+        break;
+    }
+    char buf[5];
+    sprintf(buf, "%o", usermode);
+
+    unsigned short owner = convert_bytes_to_type<unsigned short>(block, offset + 2);
+    unsigned short group = convert_bytes_to_type<unsigned short>(block, offset + 24);
+    unsigned short link_count = convert_bytes_to_type<unsigned short>(block, offset + 26);
+
+    unsigned int creation_time = convert_bytes_to_type<unsigned int>(block, offset + 12);
+    unsigned int modification_time = convert_bytes_to_type<unsigned int>(block, offset + 16);
+    unsigned int access_time = convert_bytes_to_type<unsigned int>(block, offset + 8);
+    char* c_time = convert_to_time(creation_time);
+    char* m_time = convert_to_time(modification_time);
+    char* a_time = convert_to_time(access_time);
+
+    unsigned int file_size = convert_bytes_to_type<unsigned int>(block, offset + 4);
+    if(file_size > 60){
+        print_block_addresses = true;
+    }
+    unsigned int blocks_used = convert_bytes_to_type<unsigned int>(block, offset + 28);
+
+    // Get the direct, indirect, double and triple indirect values for blocks pointed to
+    std::string block_string = "";
+    int baddress;
+    bool done = print_block_addresses;
+    for(int i = 0; i<16; i++){
+        if(done){
+            block_string += "0,";
+            continue;
+        }
+        baddress = convert_bytes_to_type<unsigned int>(block, offset + 40 + i*4);
+        if(baddress){
+            block_string += std::to_string(baddress)+",";
+        }else{
+            done = true;
+            i--;
+        }
+    }
+    block_string = block_string.substr(0, block_string.length()-1);
+
+    fprintf(stdout, "INODE,%d,%c,%s,%d,%d,%d,%s,%s,%s,%d,%d", inode_number, filetype, buf, owner, group, link_count,
+            c_time, m_time, a_time,
+            file_size, blocks_used);
+    fprintf(stdout, "%s\n", block_string.c_str());
+    free(c_time);
+    free(a_time);
+    free(m_time);
+}
+
+bool allInodes(int fd, int groupNumber, int* error){
+    int bitmap_pos = (groups[groupNumber])->inode_bitmap_address;
+    int inode_count = groups[groupNumber]->inode_count;
+    int inode_table_address = groups[groupNumber]->inode_table_address;
+    std::string result = "";
+    byte* b = read_block(fd, bitmap_pos, BLOCK_SIZE, error);
+    byte* inodes = read_block(fd, inode_table_address, BLOCK_SIZE, error);
+    for(int i = 1; i <= inode_count; i++){
+        if(!inode_is_free(b, i)){
+            inodeSummary(inodes, i); // Stuff is printed within inodeSummary, because .c_str is a bad function :/
+        }
+    }
+    return true;
 }
