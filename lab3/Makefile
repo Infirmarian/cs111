@@ -4,13 +4,13 @@
 
 exe=lab3a
 CC=g++
-FLAGS=-Wall -Wextra -g
+FLAGS=-Wall -Wextra -g -static-libstdc++
 distName=lab3a-104916969.tar.gz
 
 all: $(exe)
 
-dist: Makefile lab3.cpp utils.cpp utils.h README
-	tar -czf $(distName) Makefile lab3.cpp utils.cpp utils.h README
+dist: Makefile lab3.cpp utils.cpp utils.h README ext2_fs.h
+	tar -czf $(distName) Makefile lab3.cpp utils.cpp utils.h README ext2_fs.h
 
 $(exe): lab3.o utils.o
 	$(CC) $(FLAGS) -o $(exe) lab3.o utils.o

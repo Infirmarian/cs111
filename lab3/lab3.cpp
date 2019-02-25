@@ -9,47 +9,34 @@
 #include <string.h>
 #include <vector>
 #include <unordered_map>
+
 #include "utils.h"
+#include "ext2_fs.h"
 
 #define SUPERBLOCK_LOCATION 1
 #define INODE_TABLE_OFFSET 128
 
 static int BLOCK_SIZE = 1024;
-static byte* superblockdata = 0;
-struct groupData{
-    unsigned short free_block_count;
-    unsigned short free_inode_count;
-    unsigned int block_bitmap_address;
-    unsigned int inode_bitmap_address;
-    unsigned int first_inode_block;
-    unsigned int block_count;
-    unsigned int inode_count;
-    unsigned int inode_table_address;
-};
-std::vector<struct groupData*> groups;
+static struct ext2_super_block* superblockdata = 0;
+
+
+std::unordered_map<int, struct ext2_group_desc*> groups;
 std::unordered_map<int, std::vector<byte>> groupInodeData;
 
 std::string getSuperblockData(int fd, int* error){
     // Located 1024 bytes from the beginning of the filesystem
     std::string result = "SUPERBLOCK,";
     byte* b = read_block(fd, SUPERBLOCK_LOCATION, BLOCK_SIZE, error);
-    superblockdata = b;
-    int inode_count, block_count, block_size, blocks_per_group, inodes_per_group, first_inode;
-    short inode_size;
-    inode_count = convert_bytes_to_type<int>(b,0);
-    block_count = convert_bytes_to_type<int>(b,4);
-    block_size = convert_bytes_to_type<int>(b, 24);
+    struct ext2_super_block* superblock = read_bytes_into_struct<struct ext2_super_block>(b,0);
+    superblockdata = superblock;
     // Block size needs to be 1024 shifted by block size
-    BLOCK_SIZE = block_size = 1024 << block_size;
+    BLOCK_SIZE = EXT2_MIN_BLOCK_SIZE << superblock->s_log_block_size;
 
-    inode_size = convert_bytes_to_type<short>(b,88);
-    blocks_per_group = convert_bytes_to_type<int>(b, 32);
-    inodes_per_group = convert_bytes_to_type<int>(b, 40);
-    first_inode = convert_bytes_to_type<int>(b, 84);
-
-    result  +=  std::to_string(block_count)+","+std::to_string(inode_count)+","+std::to_string(block_size)+
-                ","+std::to_string(inode_size) + "," + std::to_string(blocks_per_group) + "," +
-                std::to_string(inodes_per_group) + "," + std::to_string(first_inode);
+    result  +=  std::to_string(superblock->s_blocks_count)+","+std::to_string(superblock->s_inodes_count)+
+                ","+std::to_string(BLOCK_SIZE)+ ","+std::to_string(superblock->s_inode_size) + "," + 
+                std::to_string(superblock->s_blocks_per_group) + "," + std::to_string(superblock->s_inodes_per_group) + 
+                "," + std::to_string(superblock->s_first_ino);
+    delete[] b;
     // don't delete the superblock data
     return result;
 }
@@ -57,55 +44,21 @@ std::string getSuperblockData(int fd, int* error){
 std::string getGroupData(int fd, int groupNumber, int* error){
     std::string result = "GROUP,"; // Guaranteed to only have 1 Group
     byte* b = read_block(fd, SUPERBLOCK_LOCATION + 1, BLOCK_SIZE, error);
-    int groupOffset = groupNumber * 32;
-    short free_block_count, free_inode_count;
-    int block_bitmap_address, inode_bitmap_address, first_inode_block;
-
-    free_block_count = convert_bytes_to_type<short>(b, groupOffset + 12);
-    free_inode_count = convert_bytes_to_type<short>(b, groupOffset + 14);
-    block_bitmap_address = convert_bytes_to_type<int>(b, groupOffset + 0);
-    inode_bitmap_address = convert_bytes_to_type<int>(b, groupOffset + 4);
-    first_inode_block = convert_bytes_to_type<int>(b, groupOffset + 8);
-
-    // Save data to a struct, for future reference
-    struct groupData* d = new struct groupData;
-    d->free_block_count = free_block_count;
-    d->free_inode_count = free_inode_count;
-    d->block_bitmap_address = block_bitmap_address;
-    d->inode_bitmap_address = inode_bitmap_address;
-    d->first_inode_block = first_inode_block;
+    struct ext2_group_desc* groupData = read_bytes_into_struct<struct ext2_group_desc>(b,groupNumber*32);
 
     // Gather information from the superblock, if it hasn't already been done
     if(!superblockdata){
-        superblockdata = read_block(fd, SUPERBLOCK_LOCATION, BLOCK_SIZE, error);
+        getSuperblockData(fd, error);
     }
-    int block_count = convert_bytes_to_type<int>(superblockdata, 4);
-    int blocks_per_group = convert_bytes_to_type<int>(superblockdata, 32);
-    int inodes_per_group = convert_bytes_to_type<int>(superblockdata, 40);
+    int block_count = superblockdata->s_blocks_count;
+    block_count = superblockdata->s_blocks_count % superblockdata->s_blocks_per_group; // only for the last group
 
-    block_count = block_count % blocks_per_group; // only for the last group
-    int inode_count = inodes_per_group;
-
-    d->block_count = block_count;
-    d->inode_count = inode_count;
-
-    // Useful only for getting Inode directory, not printed out
-    d->inode_table_address = convert_bytes_to_type<int>(b, groupOffset + 8);
-
-
-    result += std::to_string(groupNumber)+","+std::to_string(block_count)+","+std::to_string(inode_count)+
-            ","+std::to_string(free_block_count)+","+ std::to_string(free_inode_count) + 
-            ","+std::to_string(block_bitmap_address) + ","+std::to_string(inode_bitmap_address) + 
-            ","+ std::to_string(first_inode_block);
-
-    std::vector<struct groupData*>::iterator it = groups.begin();
-    for(unsigned int i = 0; i<groupNumber - groups.size(); i++){
-            groups.push_back(0);
-    }
-    for(int i = 0; i<groupNumber; i++){
-        it++;
-    }
-    groups.insert(it, d);
+    result += std::to_string(groupNumber)+","+std::to_string(block_count)+","+std::to_string(superblockdata->s_inodes_per_group)+
+            ","+std::to_string(groupData->bg_free_blocks_count)+","+ std::to_string(groupData->bg_free_inodes_count) + 
+            ","+std::to_string(groupData->bg_block_bitmap) + ","+std::to_string(groupData->bg_inode_bitmap) + 
+            ","+ std::to_string(groupData->bg_inode_table);
+    
+    groups.insert(std::pair<int, struct ext2_group_desc*>(groupNumber, groupData));
     delete[] b;
     return result;
 }
@@ -145,10 +98,10 @@ int main(int argc, char** argv){
         exit_status = 1;
     }
     if(superblockdata){
-        delete[] superblockdata;
+        free(superblockdata);
     }
-    for(unsigned int i = 0; i<groups.size(); i++){
-        delete groups[i];
+    for(std::unordered_map<int, struct ext2_group_desc*>::iterator it = groups.begin(); it!=groups.end(); it++){
+        delete it->second;
     }
     return exit_status;
 }
@@ -156,9 +109,13 @@ int main(int argc, char** argv){
 // Return a string that represents each free block in the given group
 std::string getFreeBlockData(int fd, int groupNumber, int* error){
     std::string result = "";
-    int block_count = groups[groupNumber]->block_count;
-    byte* b = read_block(fd, groups[groupNumber]->block_bitmap_address, BLOCK_SIZE, error);
-
+    std::unordered_map<int, struct ext2_group_desc*>::iterator it = groups.find(groupNumber);
+    if(it == groups.end()){
+        getGroupData(fd, groupNumber, error);
+        groups.find(groupNumber);
+    }
+    byte* b = read_block(fd, it->second->bg_block_bitmap, BLOCK_SIZE, error);
+    int block_count = superblockdata->s_blocks_per_group;
     for(int i = 1; i <= block_count; i++){
         if(block_is_free(b, i)){
             result += "BFREE,"+std::to_string(i)+"\n";
@@ -172,8 +129,13 @@ std::string getFreeBlockData(int fd, int groupNumber, int* error){
 // Return a string that represents each free block in the given group
 std::string getFreeInodeData(int fd, int groupNumber, int* error){
     std::string result = "";
-    int inode_count = groups[groupNumber]->inode_count;
-    byte* b = read_block(fd, groups[groupNumber]->inode_bitmap_address, BLOCK_SIZE, error);
+    std::unordered_map<int, struct ext2_group_desc*>::iterator it = groups.find(groupNumber);
+    if(it == groups.end()){
+        getGroupData(fd, groupNumber, error);
+        it = groups.find(groupNumber);
+    }
+    int inode_count = superblockdata->s_inodes_per_group;
+    byte* b = read_block(fd, it->second->bg_inode_bitmap, BLOCK_SIZE, error);
 
     for(int i = 1; i<=inode_count; i++){
         if(inode_is_free(b, i)){
@@ -259,9 +221,14 @@ void inodeSummary(byte* block, int inode_number){
 }
 
 bool allInodes(int fd, int groupNumber, int* error){
-    int bitmap_pos = (groups[groupNumber])->inode_bitmap_address;
-    int inode_count = groups[groupNumber]->inode_count;
-    int inode_table_address = groups[groupNumber]->inode_table_address;
+    std::unordered_map<int, struct ext2_group_desc*>::iterator it = groups.find(groupNumber);
+    if(it == groups.end()){
+        getGroupData(fd, groupNumber, error);
+        it = groups.find(groupNumber);
+    }
+    int bitmap_pos = it->second->bg_inode_bitmap;
+    int inode_count = superblockdata->s_inodes_per_group;
+    int inode_table_address = it->second->bg_inode_table;
     std::string result = "";
     byte* b = read_block(fd, bitmap_pos, BLOCK_SIZE, error);
     byte* inodes = read_block(fd, inode_table_address, BLOCK_SIZE, error);
