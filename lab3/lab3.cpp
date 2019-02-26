@@ -53,13 +53,13 @@ int main(int argc, char** argv){
     fprintf(stdout, "%s", getFreeInodeData(img_fd, 0, e).c_str()); // Inode DATA
     allInodes(img_fd, 0, e); // Data is printed within, to prevent a core dump due to "stack smashing"
     if(e > 0){
-        exit_status = 1;
+        exit_status = 2;
     }
 
     if(close(img_fd)){
         fprintf(stderr, "Unable to close disk image file: %s\n", strerror(errno));
         Fflush(stderr);
-        exit_status = 1;
+        exit_status = 2;
     }
     if(superblockdata){
         delete superblockdata;
@@ -67,6 +67,7 @@ int main(int argc, char** argv){
     for(std::unordered_map<int, struct ext2_group_desc*>::iterator it = groups.begin(); it!=groups.end(); it++){
         delete it->second;
     }
+
     return exit_status;
 }
 

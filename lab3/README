@@ -2,3 +2,57 @@ NAME: Robert Geil
 EMAIL: rgeil@ucla.edu
 ID: 104916969
 
+Lab 3A - File System Interpretation
+
+Included files:
+    - lab3.cpp
+        C++ source file to analyze a filesystem
+    - utils.cpp
+        C++ source file containing utilities utilized by lab3
+    - utils.h
+        Header file for linking utils.cpp
+    - ext2_fs.h
+        Provided header file with definitions useful for analyzing the ext2 filesystem
+    - Makefile
+        Makefile with options to make distribution (make dist), compile the program (make all),
+        and clean the working directory (make clean)
+    - README
+        This file, describing the program and output
+    
+Program Description:
+    lab3a:
+        This program takes in a disk image and analyzes the directories, and prints
+        information about the system.
+
+        Sample usage:
+        ./lab3a <DISK IMAGE>
+
+        Output:
+            SUPERBLOCK,total number of blocks, total number of inodes, block size, inode size, blocks per group, inodes per group, first non-reserved inode
+            GROUP,group number,total number of blocks in this group, total number of inodes in this group, number of free blocks, number of free i-nodes, block number of free block bitmap for this group,block number of free i-node bitmap for this group, block number of first block of i-nodes in this group
+            
+            For each free block and inode in the group, BFREE,block number or IFREE,block number will be
+            printed out. 
+
+            For each non-zero inode in the group, the following will be printed out
+            INODE,inode numberm file type ('f' for file, 'd' for directory, 's' for symbolic link, '?" for anything else),mode, owner, group, link count, time of last I-node change, modification time, time of last access, file size, number of (512 byte) blocks of disk space taken up by this file, 15 integers for the remaining block addresses
+
+            For each directory/file in the system, the following is printed out
+            DIRENT, parent inode number,logical byte offset,inode number of the referenced file,entry length, name length, name 
+
+            For each indirect block, the following is printed out
+            INDIRECT, I-node number of the owning file, level of indirection for the block being scanned, logical block offset, block number of the (1, 2, 3) indirect block being scanned, block number of the referenced block 
+
+    Return codes:
+        0: Success
+        1: Bad arguments
+        2: Other errors
+
+Limitations and Features:
+    This program is nominally extensible for multiple group filesystems, as the infrastructure
+    for multiple groups exists, although is not tested. In addition, this program features good
+    memory management, with all memory leaks checked with valgrind. The program is also written in
+    C++, and utilizes some templated functions and standard containers, helping to compress amount
+    of code required. One limitation of this program is the lack of a testing suite. All testing was
+    done with either the sanity check provided, or using manual testing.
+
