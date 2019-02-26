@@ -28,7 +28,7 @@ inline T convert_bytes_to_type(byte* b, int pos){
 
 template<class T>
 inline T* read_bytes_into_struct(byte* b, int pos){
-    T* ptr = (T*) malloc(sizeof(T)); // declare pointer
+    T* ptr = new T;//(T*) malloc(sizeof(T)); // declare pointer
     char* char_pointer = (char*) ptr;
     for(size_t i = 0; i<sizeof(T); i++){
         *(char_pointer + i) = b[i+pos];

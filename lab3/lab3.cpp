@@ -9,6 +9,7 @@
 #include <string.h>
 #include <vector>
 #include <unordered_map>
+#include <cmath>
 
 #include "utils.h"
 #include "ext2_fs.h"
@@ -61,7 +62,7 @@ int main(int argc, char** argv){
         exit_status = 1;
     }
     if(superblockdata){
-        free(superblockdata);
+        delete superblockdata;
     }
     for(std::unordered_map<int, struct ext2_group_desc*>::iterator it = groups.begin(); it!=groups.end(); it++){
         delete it->second;
@@ -70,6 +71,8 @@ int main(int argc, char** argv){
 }
 
 struct ext2_group_desc* getGroupData(int fd, int groupNumber, int& error){
+    if(groups.find(groupNumber) != groups.end())
+        return groups.find(groupNumber)->second;
     byte* b = read_block(fd, SUPERBLOCK_LOCATION + 1, BLOCK_SIZE, error);
     struct ext2_group_desc* groupData = read_bytes_into_struct<struct ext2_group_desc>(b,groupNumber*32);
     groups.insert(std::pair<int, struct ext2_group_desc*>(groupNumber, groupData));
@@ -165,8 +168,7 @@ std::string getFreeInodeData(int fd, int groupNumber, int& error){
 }
 
 struct ext2_inode* getInodeEntry(byte* block, int number){
-    struct ext2_inode* s = read_bytes_into_struct<ext2_inode>(block, number*INODE_TABLE_OFFSET);
-    return s;
+    return read_bytes_into_struct<ext2_inode>(block, number*INODE_TABLE_OFFSET);
 }
 
 // Returns the type of this file
@@ -175,6 +177,7 @@ char formatAndPrintInodeSummary(byte* block, int inode_number){
     inode_number --;
     struct ext2_inode* s = getInodeEntry(block, inode_number);
     if(s->i_mode == 0 || s->i_links_count == 0){
+        delete s;
         return ' ';
     }
     unsigned short usermode = s->i_mode & 0x0FFF;
@@ -215,13 +218,16 @@ char formatAndPrintInodeSummary(byte* block, int inode_number){
     ","+c_time+","+m_time+","+a_time+","+std::to_string(s->i_size)+","+std::to_string(s->i_blocks)+","+addressblocks;
 
     fprintf(stdout, "%s\n", result.c_str());
+    delete s;
     return filetype;
 }
 
 int printDirectory(byte* block, int inode_number, int offset){
     struct ext2_dir_entry* ddata = read_bytes_into_struct<ext2_dir_entry>(block, offset);
     if(ddata->inode == 0){
-        return offset + ddata->rec_len;
+        int res = offset + ddata->rec_len;
+        delete ddata;
+        return res;
     }
     fprintf(stdout, "DIRENT,%d,%d,%d,%d,%d,", inode_number, offset, ddata->inode, ddata->rec_len, ddata->name_len);
     std::string name = "";
@@ -229,8 +235,11 @@ int printDirectory(byte* block, int inode_number, int offset){
         name += ddata-> name[i];
     }
     fprintf(stdout, "'%s'\n", name.c_str());
-    return offset + ddata->rec_len;
+    int rval = offset + ddata->rec_len;
+    delete ddata;
+    return rval;
 }
+
 void evaluateDirectoryBlock(int fd, int block_addr, int inode_number, int& error){
     if(block_addr == 0)
         return;
@@ -250,54 +259,46 @@ void formatAndPrintDirectSummary(int fd, byte* inode_block, int inode_number, in
     for(int i = 0; i<EXT2_NDIR_BLOCKS; i++){
         evaluateDirectoryBlock(fd, s->i_block[i], inode_number, error);
     }
+    delete s;
+}
+
+void scanIndirectionRecursively(int fd, int block_number, int level, int inode_number, int maxlevel, bool printdir, int& offset, int& error){
+    byte* b = read_block(fd, block_number, BLOCK_SIZE, error);
+    for(int i = 0; i<BLOCK_SIZE; i+=4){
+        int block = convert_bytes_to_type<int>(b,i);
+        if(block){
+            if(level == 1){
+                fprintf(stdout, "INDIRECT,%d,%d,%d,%d,%d\n", inode_number+1, level, offset, block_number, block);
+                if(printdir){
+                    evaluateDirectoryBlock(fd, block, inode_number, error);
+                }
+            }else{
+                fprintf(stdout, "INDIRECT,%d,%d,%d,%d,%d\n", inode_number+1, level, offset, block_number, block);
+                scanIndirectionRecursively(fd, block, level -1, inode_number, maxlevel, printdir, offset, error);
+            }
+        }
+        offset += (int) pow(255, level-1);
+    }
+    delete[] b;
+}
+
+void printAllIndirection(int fd, byte* inode_block, int inode_number, bool printDirContents, int& error){
+    inode_number --;
+    struct ext2_inode* s = getInodeEntry(inode_block, inode_number);
+    int depth = 12;
     // Indirect blocks
     if(s->i_block[EXT2_IND_BLOCK]){
-        byte* b = read_block(fd, s->i_block[EXT2_IND_BLOCK], BLOCK_SIZE, error);
-        for(int i = 0; i<BLOCK_SIZE; i+=4){
-            int block = convert_bytes_to_type<int>(b, i);
-            evaluateDirectoryBlock(fd, block, inode_number, error);
-        }
-        delete[] b;
+        scanIndirectionRecursively(fd, s->i_block[EXT2_IND_BLOCK], 1, inode_number, 1, printDirContents, depth, error);
     }
     // Doubly Indirect blocks
     if(s->i_block[EXT2_DIND_BLOCK]){
-        byte* b = read_block(fd, s->i_block[EXT2_DIND_BLOCK], BLOCK_SIZE, error);
-        for(int i = 0; i<BLOCK_SIZE; i+=4){
-            int diblock = convert_bytes_to_type<int>(b, i); // first indirect block
-            if(diblock){
-                byte* db = read_block(fd, diblock, BLOCK_SIZE, error);
-                for(int j = 0; j<BLOCK_SIZE; j+=4){
-                    int block = convert_bytes_to_type<int>(db, j);
-                    evaluateDirectoryBlock(fd, block, inode_number, error);
-                }
-                delete[] db;
-            }
-        }
-        delete[] b;
+        scanIndirectionRecursively(fd, s->i_block[EXT2_DIND_BLOCK], 2, inode_number, 2, printDirContents, depth, error);
     }
     // Triply Indirect blocks
     if(s->i_block[EXT2_TIND_BLOCK]){
-        byte* b = read_block(fd, s->i_block[EXT2_DIND_BLOCK], BLOCK_SIZE, error);
-        for(int i = 0; i<BLOCK_SIZE; i+=4){
-            int diblock = convert_bytes_to_type<int>(b, i); // first indirect block
-            if(diblock){
-                byte* db = read_block(fd, diblock, BLOCK_SIZE, error);
-                for(int j = 0; j<BLOCK_SIZE; j+=4){
-                    int tiblock = convert_bytes_to_type<int>(db, j);
-                    if(tiblock){
-                        byte* tb = read_block(fd, tiblock, BLOCK_SIZE, error);
-                        for(int k = 0; k<BLOCK_SIZE; k+=4){
-                            int block = convert_bytes_to_type<int>(tb, k);
-                            evaluateDirectoryBlock(fd, block, inode_number, error);
-                        }
-                        delete[] tb;
-                    }
-                }
-                delete[] db;
-            }
-        }
-        delete[] b;
+        scanIndirectionRecursively(fd, s->i_block[EXT2_TIND_BLOCK], 3, inode_number, 3, printDirContents, depth, error);
     }
+    delete s;
 }
 
 
@@ -319,6 +320,7 @@ bool allInodes(int fd, int groupNumber, int& error){
             if(type == 'd'){
                 formatAndPrintDirectSummary(fd, inodes, i, error);
             }
+            printAllIndirection(fd, inodes, i, type=='d', error);
         }
     }
     delete[] b;
