@@ -37,6 +37,13 @@ byte* read_block(int fd, int block_address, int block_size, int& error){
     }
     return block;
 }
+// Read in multiple blocks into a dynamically allocated array
+byte* read_blocks(int fd, int block_address, int block_size, int block_count, int& error){
+    byte* block = new byte[block_size*block_count];
+    if(Pread(fd, block, sizeof(byte)*block_size*block_count, block_address*block_size))
+        error++;
+    return block;
+}
 
 bool inode_is_free(std::vector<byte> inodes, int number){
     number --;
@@ -58,14 +65,14 @@ bool block_is_free(byte* blocks, int number){
     return inode_is_free(blocks, number);
 }
 
-char* convert_to_time(long int total_seconds){
+std::string convert_to_time(long int total_seconds){
     struct tm* time = gmtime(&total_seconds);
-    char* buf = (char*)malloc(sizeof(char)*30);
+    char buf[30];
     sprintf(buf, "%02d/%02d/%02d %02d:%02d:%02d",
         time->tm_mon + 1, time->tm_mday, time->tm_year%100, time->tm_hour,
         time->tm_min, time->tm_sec );
     std::string res = "";
     res.append(buf);
-    return buf;
+    return res;
 }
 

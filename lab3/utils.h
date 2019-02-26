@@ -9,11 +9,12 @@ typedef unsigned char byte;
 void Fflush(FILE* f);
 int Pread(int fd, void* ptr, size_t size, off_t offset);
 byte* read_block(int fd, int block_address, int block_size, int& error);
+byte* read_blocks(int fd, int block_address, int block_size, int block_count, int& error);
 bool inode_is_free(std::vector<byte> inodes, int number);
 bool inode_is_free(byte* b, int number);
 bool block_is_free(std::vector<byte> blocks, int number);
 bool block_is_free(byte* blocks, int number);
-char* convert_to_time(long int total_seconds);
+std::string convert_to_time(long int total_seconds);
 // Inline definition for converting bytes to type
 template<class T>
 inline T convert_bytes_to_type(byte* b, int pos){
