@@ -223,31 +223,32 @@ char formatAndPrintInodeSummary(byte* block, int inode_number){
     return filetype;
 }
 
-int printDirectory(byte* block, int inode_number, int offset){
-    struct ext2_dir_entry* ddata = read_bytes_into_struct<ext2_dir_entry>(block, offset);
+void printDirectory(byte* block, int inode_number, int& block_offset, int& logical_offset){
+    struct ext2_dir_entry* ddata = read_bytes_into_struct<ext2_dir_entry>(block, block_offset);
     if(ddata->inode == 0){
-        int res = offset + ddata->rec_len;
+        block_offset += ddata->rec_len;
+        logical_offset += ddata->rec_len;
         delete ddata;
-        return res;
+        return;
     }
-    fprintf(stdout, "DIRENT,%d,%d,%d,%d,%d,", inode_number, offset, ddata->inode, ddata->rec_len, ddata->name_len);
+    fprintf(stdout, "DIRENT,%d,%d,%d,%d,%d,", inode_number, logical_offset, ddata->inode, ddata->rec_len, ddata->name_len);
     std::string name = "";
     for(int i = 0; i<ddata->name_len; i++){
         name += ddata-> name[i];
     }
     fprintf(stdout, "'%s'\n", name.c_str());
-    int rval = offset + ddata->rec_len;
+    block_offset += ddata->rec_len;
+    logical_offset += ddata->rec_len;
     delete ddata;
-    return rval;
 }
 
-void evaluateDirectoryBlock(int fd, int block_addr, int inode_number, int& error){
+void evaluateDirectoryBlock(int fd, int block_addr, int inode_number, int init_offset, int& error){
     if(block_addr == 0)
         return;
     int offset = 0;
     byte* b = read_block(fd, block_addr, BLOCK_SIZE, error);
     while(offset < BLOCK_SIZE){
-        offset = printDirectory(b, inode_number + 1, offset);
+        printDirectory(b, inode_number + 1, offset, init_offset);
     }
     delete[] b;
 }
@@ -258,7 +259,7 @@ void formatAndPrintDirectSummary(int fd, byte* inode_block, int inode_number, in
     struct ext2_inode* s = getInodeEntry(inode_block, inode_number);
     // Direct blocks
     for(int i = 0; i<EXT2_NDIR_BLOCKS; i++){
-        evaluateDirectoryBlock(fd, s->i_block[i], inode_number, error);
+        evaluateDirectoryBlock(fd, s->i_block[i], inode_number, i*BLOCK_SIZE, error);
     }
     delete s;
 }
@@ -271,7 +272,7 @@ void scanIndirectionRecursively(int fd, int block_number, int level, int inode_n
             if(level == 1){
                 fprintf(stdout, "INDIRECT,%d,%d,%d,%d,%d\n", inode_number+1, level, offset, block_number, block);
                 if(printdir){
-                    evaluateDirectoryBlock(fd, block, inode_number, error);
+                    evaluateDirectoryBlock(fd, block, inode_number, offset*BLOCK_SIZE, error);
                 }
             }else{
                 fprintf(stdout, "INDIRECT,%d,%d,%d,%d,%d\n", inode_number+1, level, offset, block_number, block);
