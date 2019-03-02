@@ -19,6 +19,7 @@ class Superblock():
 
 class Inode():
     def __init__(self, line):
+        self.indirect = []
         self.number = int(line[1])
         self.filetype = line[2]
         self.mode = int(line[3])
@@ -41,6 +42,9 @@ class Inode():
             self.indirect_block = int(line[24])
             self.double_indirect = int(line[25])
             self.triple_indirect = int(line[26])
+    
+    def insert_indirect_block(self, indirect):
+        self.indirect.append(indirect)
 
 class Group():
     def __init__(self, line):
@@ -53,6 +57,12 @@ class Group():
         self.free_inode_bitmap = int(line[7])
         self.first_inode = int(line[8])
 
+class Indirect():
+    def __init__(self, line):
+        self.inode = int(line[1])
+        self.indirection = int(line[2])
+        self.block_number = int(line[5])
+
 def main():
     arguments = sys.argv
     if(len(arguments) != 2):
@@ -62,7 +72,7 @@ def main():
     if(not os.path.exists(file)):
         print("Unable to open provided file", file=sys.stderr)
         exit(1)
-    inodes = []
+    inodes = {}
     groups = []
     freeblocks = set()
     with open(file, "r") as f:
@@ -71,11 +81,14 @@ def main():
             if line[0] == "SUPERBLOCK":
                 superblock = Superblock(line)
             elif line[0] == "INODE":
-                inodes.append(Inode(line))
+                inodes[line[1]] = Inode(line)
             elif line[0] == "GROUP":
                 groups.append(Group(line))
             elif line[0] == "BFREE":
-                freeblocks.add(line[1])
+                freeblocks.add(int(line[1]))
+            elif line[0] == "INDIRECT":
+                inodes[line[1]].insert_indirect_block(Indirect(line))
+    
     error = validateInodes(inodes, superblock)
     error += checkUnreferencedBlocks(freeblocks, inodes, superblock, groups)
     exit(2 if error > 0 else 0)  # Exit from the system with the given status
@@ -92,7 +105,7 @@ def validateInodes(inodes, superblock):
     error = 0
     first_free_block = first_nonreserved_block(superblock)
     # Check that the blocks for each inode aren't negative or above the total allocated blocks
-    for inode in inodes:
+    for _, inode in inodes.items():
         for i in range(0, len(inode.blocks)):
             if inode.blocks[i] < 0 or inode.blocks[i] >= superblock.block_count:
                 print("INVALID BLOCK {0} IN INODE {1} AT OFFSET {2}".format(inode.blocks[i], inode.number, i))
@@ -123,18 +136,27 @@ def validateInodes(inodes, superblock):
 def checkUnreferencedBlocks(freeblocks, inodes, superblock, groups):
     referenced_blocks = set()
     error = 0
-    for inode in inodes:
+    for _, inode in inodes.items():
         for block in inode.blocks:
             referenced_blocks.add(block)
+        for indirect in inode.indirect:
+            referenced_blocks.add(indirect.block_number)
         referenced_blocks.add(inode.indirect_block)
         referenced_blocks.add(inode.double_indirect)
         referenced_blocks.add(inode.triple_indirect)
     first_block = first_nonreserved_block(superblock)
-    for i in range(first_block, first_block + groups[0].total_blocks):
+    for i in range(first_block, groups[0].total_blocks):
         if (i not in freeblocks) and (i not in referenced_blocks):
             print("UNREFERENCED BLOCK {0}".format(i))
             error = 2
+    for allocated in referenced_blocks:
+        if allocated in freeblocks:
+            print("ALLOCATED BLOCK {0} ON FREELIST".format(allocated))
+            error = 2
     return error
+
+def checkDuplicateBlocks(inodes):
+    return 0
 
 if(__name__ == '__main__'):
     main()
