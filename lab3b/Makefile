@@ -5,13 +5,18 @@
 exe=lab3b
 distName=lab3b-104916969.tar.gz
 
-all: lab3.py
+all: lab3b
+
+dist: lab3.py Makefile README tests.sh
+	tar -czf $(distName) lab3.py Makefile README tests.sh
+
+check: lab3b tests.sh
+	./tests.sh
+
+lab3b: lab3.py
 	echo 'python3 lab3.py $$1 $$2' > $(exe)
 	chmod +x $(exe)
-
-dist: lab3.py Makefile
-	tar -czf $(distName) lab3.py Makefile
-
 clean:
 	$(RM) $(exe)
 	$(RM) $(distName)
+	$(RM) -r tests
