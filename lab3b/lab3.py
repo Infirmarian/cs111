@@ -5,6 +5,7 @@
 import csv
 import sys
 import os
+import math
 
 class Superblock():
     def __init__(self, line):
@@ -41,6 +42,16 @@ class Inode():
             self.double_indirect = int(line[25])
             self.triple_indirect = int(line[26])
 
+class Group():
+    def __init__(self, line):
+        self.group_number = int(line[1])
+        self.total_blocks = int(line[2])
+        self.total_inodes = int(line[3])
+        self.free_blocks = int(line[4])
+        self.free_inodes = int(line[5])
+        self.free_block_bitmap = int(line[6])
+        self.free_inode_bitmap = int(line[7])
+        self.first_inode = int(line[8])
 
 def main():
     arguments = sys.argv
@@ -52,6 +63,8 @@ def main():
         print("Unable to open provided file", file=sys.stderr)
         exit(1)
     inodes = []
+    groups = []
+    freeblocks = set()
     with open(file, "r") as f:
         reader = csv.reader(f)
         for line in reader:
@@ -59,28 +72,69 @@ def main():
                 superblock = Superblock(line)
             elif line[0] == "INODE":
                 inodes.append(Inode(line))
+            elif line[0] == "GROUP":
+                groups.append(Group(line))
+            elif line[0] == "BFREE":
+                freeblocks.add(line[1])
     error = validateInodes(inodes, superblock)
+    error += checkUnreferencedBlocks(freeblocks, inodes, superblock, groups)
+    exit(2 if error > 0 else 0)  # Exit from the system with the given status
 
-    exit(error)  # Exit from the system with the given status
+def first_nonreserved_block(superblock):
+    block = (1024+1024)/superblock.block_size
+    block += math.ceil((32.0*1)/superblock.block_size) # Group Descriptor Table (Only 1 group guaranteed)
+    block += 1 # Block bitmap
+    block += 1 # Inode bitmap
+    block += math.ceil((128.0 * superblock.inodes_per_group)/superblock.block_size)
+    return int(block)
 
 def validateInodes(inodes, superblock):
     error = 0
+    first_free_block = first_nonreserved_block(superblock)
     # Check that the blocks for each inode aren't negative or above the total allocated blocks
     for inode in inodes:
         for i in range(0, len(inode.blocks)):
             if inode.blocks[i] < 0 or inode.blocks[i] >= superblock.block_count:
                 print("INVALID BLOCK {0} IN INODE {1} AT OFFSET {2}".format(inode.blocks[i], inode.number, i))
                 error = 2
+            if inode.blocks[i] < first_free_block and inode.blocks[i] != 0:
+                print("RESERVED BLOCK {0} IN INODE {1} AT OFFSET {2}".format(inode.blocks[i], inode.number, i))
+                error = 2
         if inode.indirect_block < 0 or inode.indirect_block > superblock.block_count:
             print("INVALID INDIRECT BLOCK {0} IN INODE {1} AT OFFSET 12".format(inode.indirect_block, inode.number))
+            error = 2
+        if inode.indirect_block < first_free_block and inode.indirect_block != 0:
+            print("RESERVED INDIRECT BLOCK {0} IN INODE {1} AT OFFSET 12".format(inode.indirect_block, inode.number))
             error = 2
         if inode.double_indirect < 0 or inode.double_indirect > superblock.block_count:
             print("INVALID DOUBLE INDIRECT BLOCK {0} IN INODE {1} AT OFFSET 268".format(inode.double_indirect, inode.number))
             error = 2
+        if inode.double_indirect < first_free_block and inode.double_indirect != 0:
+            print("RESERVED DOUBLE INDIRECT BLOCK {0} IN INODE {1} AT OFFSET 268".format(inode.double_indirect, inode.number))
+            error = 2
         if inode.triple_indirect < 0 or inode.triple_indirect > superblock.block_count:
             print("INVALID TRIPLE INDIRECT BLOCK {0} IN INODE {1} AT OFFSET 65804".format(inode.triple_indirect, inode.number)) 
             error = 2
+        if inode.triple_indirect < first_free_block and inode.triple_indirect != 0:
+            print("RESERVED TRIPLE INDIRECT BLOCK {0} IN INODE {1} AT OFFSET 65804".format(inode.triple_indirect, inode.number))
+            error = 2
     return error
-         
+
+def checkUnreferencedBlocks(freeblocks, inodes, superblock, groups):
+    referenced_blocks = set()
+    error = 0
+    for inode in inodes:
+        for block in inode.blocks:
+            referenced_blocks.add(block)
+        referenced_blocks.add(inode.indirect_block)
+        referenced_blocks.add(inode.double_indirect)
+        referenced_blocks.add(inode.triple_indirect)
+    first_block = first_nonreserved_block(superblock)
+    for i in range(first_block, first_block + groups[0].total_blocks):
+        if (i not in freeblocks) and (i not in referenced_blocks):
+            print("UNREFERENCED BLOCK {0}".format(i))
+            error = 2
+    return error
+
 if(__name__ == '__main__'):
     main()
