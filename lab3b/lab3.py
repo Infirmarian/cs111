@@ -75,6 +75,7 @@ def main():
     inodes = {}
     groups = []
     freeblocks = set()
+    freeinodes = set()
     with open(file, "r") as f:
         reader = csv.reader(f)
         for line in reader:
@@ -86,11 +87,15 @@ def main():
                 groups.append(Group(line))
             elif line[0] == "BFREE":
                 freeblocks.add(int(line[1]))
+            elif line[0] == "IFREE":
+                freeinodes.add(int(line[1]))
             elif line[0] == "INDIRECT":
                 inodes[line[1]].insert_indirect_block(Indirect(line))
     
     error = validateInodes(inodes, superblock)
     error += checkUnreferencedBlocks(freeblocks, inodes, superblock, groups)
+    error += checkDuplicateBlocks(inodes)
+    error += checkUnreferencedInodes(freeinodes, inodes, superblock)
     exit(2 if error > 0 else 0)  # Exit from the system with the given status
 
 def first_nonreserved_block(superblock):
@@ -155,8 +160,53 @@ def checkUnreferencedBlocks(freeblocks, inodes, superblock, groups):
             error = 2
     return error
 
+def checkUnreferencedInodes(freeinodes, inodes, superblock):
+    error = 0
+    referenced_inodes = set()
+    for key in inodes:
+        referenced_inodes.add(int(key))
+    for referenced in referenced_inodes:
+        if referenced in freeinodes:
+            print("ALLOCATED INODE {0} ON FREELIST".format(referenced))
+            error = 2
+    for i in range(superblock.first_non_reserved_inode, superblock.inodes_per_group+1):
+        if (i not in referenced_inodes) and (i not in freeinodes):
+            print("UNALLOCATED INODE {0} NOT ON FREELIST".format(i))
+            error = 2
+    return error
+
 def checkDuplicateBlocks(inodes):
-    return 0
+    blocks = {}
+    error = 0
+    for _, inode in inodes.items():
+        for i in range(0, len(inode.blocks)):
+            if inode.blocks[i] != 0:
+                if inode.blocks[i] in blocks:
+                    blocks[inode.blocks[i]].append(["", inode.number, i])
+                else:
+                    blocks[inode.blocks[i]] = [["", inode.number, i]]
+        if inode.indirect_block != 0:
+            if inode.indirect_block in blocks:
+                blocks[inode.indirect_block].append(["INDIRECT ", inode.number, 12])
+            else:
+                blocks[inode.indirect_block] = [["INDIRECT ", inode.number, 12]]
+        if inode.double_indirect != 0:
+            if inode.double_indirect in blocks:
+                blocks[inode.double_indirect].append(["DOUBLE INDIRECT ", inode.number, 268])
+            else:
+                blocks[inode.double_indirect] = [["DOUBLE INDIRECT ", inode.number, 268]]
+        if inode.triple_indirect != 0:
+            if inode.triple_indirect in blocks:
+                blocks[inode.triple_indirect].append(["TRIPLE INDIRECT ", inode.number, 65804])
+            else:
+                blocks[inode.triple_indirect] = [["TRIPLE INDIRECT ", inode.number, 65804]]
+    for key, ref in blocks.items():
+        if len(ref) > 1:
+            error = 2
+            for dup in ref:
+                print("DUPLICATE {0}BLOCK {1} IN INODE {2} AT OFFSET {3}".format(dup[0], key, dup[1], dup[2]))
+    return error
+
 
 if(__name__ == '__main__'):
     main()
