@@ -245,7 +245,6 @@ def checkDirectoryInodes(directories, inodes, freeinodes, superblock):
     allocated_list = set()
     for _, inode in inodes.items():
         allocated_list.add(inode.number)
-    allocated_list = allocated_list | freeinodes
     for ins in directories:
         for dir in directories[ins]:
             if dir.inode < 1 or dir.inode > superblock.inodes_per_group:

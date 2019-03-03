@@ -2,3 +2,61 @@ NAME: Robert Geil
 EMAIL:rgeil@ucla.edu
 ID:104916969
 
+Lab 3B: File System Consistency Analysis
+
+Included File:
+    - lab3.py
+        Python 3 file that takes in a CSV describing a filesystem and runs analysis on inconsistancies
+    - Makefile
+        Makefile to create executable lab3b, as well as a tar distribution (dist), a series of tests (check)
+        and clean the working directory (clean) 
+    - README
+        A text file containing a description of program functionality
+    - tests.sh
+        A shell script to download and run a series of checks on lab3.py
+    
+Usage:
+    The program will take in the given CSV file, representing the contents of a filesystem.
+    The program then analyzes the filesystem to check for corruption. 
+
+    Sample usage:
+        ./lab3b <CSV FILE>
+
+    Output:
+        INVALID BLOCK ? IN INODE ? AT OFFSET ?
+            - Block beyond the range of the filesystem was referenced
+        RESERVED BLOCK ? IN INODE ? AT OFFSET ?
+            - Block reserved for system use was referenced
+        UNREFERENCED BLOCK ?
+            - Block doesn't exist on the free list or pointed to by any inode
+        ALLOCATED BLOCK ? ON FREELIST
+            - Block is both pointed to by an inode and the freelist
+        DUPLICATE BLOCK ? IN INODE ? AT OFFSET ?
+            - Block is pointed to by multiple inodes
+        ALLOCATED INODE ? ON FREELIST
+            - Inode both is allocated and marked as free
+        UNALLOCATED INODE ? NOT ON FREELIST
+            - Inode isn't allocated but not marked as free
+        INODE ? HAS ? LINKS BUT LINKCOUNT IS ?
+            - Discrepency between the amount of links to an inode and 
+            how many directories reference inconsistancies
+        DIRECTORY INODE ? NAME 'directory name' UNALLOCATED INODE ?
+            - Directory entry points to an unallocated inode
+        DIRECTORY INODE ? NAME 'directory name' INVALID INODE ?
+            - Directory entry points to an invalid inode (outside the system)
+        DIRECTORY INODE ? NAME '..' LINK TO INODE ? SHOULD BE ?
+            - Directory '..' doesn't point to parent
+        DIRECTORY INODE ? NAME '.' LINK TO INODE ? SHOULD BE ?
+            - Directory '.' doesn't point to itself
+    
+    Return Codes:
+        - 0: Success, no inconsistancies found
+        - 1: Failure, bad parameters or system call failure
+        - 2: Success, inconsistencies found
+
+Features and Limitations:
+    The program has potential to be expanded to work with multiple groups, with
+    reasonably little modification. In addition, by creative usage of python 3
+    containers, nearly all lookups occur in O(1) time, meaning that overall time
+    complexity is on the order of O(N logN) or O(N). In addition, the csv file
+    provided is only read into memory one time, reducing system calls and overhead
