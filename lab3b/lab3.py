@@ -7,6 +7,8 @@ import sys
 import os
 import math
 
+ext2_root_ino = 2
+
 class Superblock():
     def __init__(self, line):
         self.block_count = int(line[1])
@@ -16,6 +18,12 @@ class Superblock():
         self.blocks_per_group = int(line[5])
         self.inodes_per_group = int(line[6])
         self.first_non_reserved_inode = int(line[7])
+
+class DirectoryEntry():
+    def __init__(self, line):
+        self.parent_inode = int(line[1])
+        self.inode = int(line[3])
+        self.name = line[6]
 
 class Inode():
     def __init__(self, line):
@@ -76,6 +84,7 @@ def main():
     groups = []
     freeblocks = set()
     freeinodes = set()
+    directoryEntries = {}
     with open(file, "r") as f:
         reader = csv.reader(f)
         for line in reader:
@@ -91,11 +100,19 @@ def main():
                 freeinodes.add(int(line[1]))
             elif line[0] == "INDIRECT":
                 inodes[line[1]].insert_indirect_block(Indirect(line))
+            elif line[0] == "DIRENT":
+                if int(line[1]) in directoryEntries:
+                    directoryEntries[int(line[1])].append(DirectoryEntry(line))
+                else:
+                    directoryEntries[int(line[1])] = [DirectoryEntry(line)]
     
     error = validateInodes(inodes, superblock)
     error += checkUnreferencedBlocks(freeblocks, inodes, superblock, groups)
     error += checkDuplicateBlocks(inodes)
     error += checkUnreferencedInodes(freeinodes, inodes, superblock)
+    error += checkLinkInconsistancies(inodes, directoryEntries)
+    error += checkDirectoryInodes(directoryEntries, inodes, freeinodes, superblock)
+    error += checkDirectoryParents(directoryEntries, inodes)
     exit(2 if error > 0 else 0)  # Exit from the system with the given status
 
 def first_nonreserved_block(superblock):
@@ -207,6 +224,63 @@ def checkDuplicateBlocks(inodes):
                 print("DUPLICATE {0}BLOCK {1} IN INODE {2} AT OFFSET {3}".format(dup[0], key, dup[1], dup[2]))
     return error
 
+def checkLinkInconsistancies(inodes, directories):
+    link_counts = {}
+    error = 0
+    for ins in directories:
+        for dir in directories[ins]:
+            if dir.inode in link_counts:
+                link_counts[dir.inode] += 1
+            else:
+                link_counts[dir.inode] = 1
+    for _, inode in inodes.items():
+        count = 0 if inode.number not in link_counts else link_counts[inode.number]
+        if count != inode.link_count:
+            print("INODE {0} HAS {1} LINKS BUT LINKCOUNT IS {2}".format(inode.number, count, inode.link_count))
+            error = 2
+    return error
+
+def checkDirectoryInodes(directories, inodes, freeinodes, superblock):
+    error = 0
+    allocated_list = set()
+    for _, inode in inodes.items():
+        allocated_list.add(inode.number)
+    allocated_list = allocated_list | freeinodes
+    for ins in directories:
+        for dir in directories[ins]:
+            if dir.inode < 1 or dir.inode > superblock.inodes_per_group:
+                print("DIRECTORY INODE {0} NAME {1} INVALID INODE {2}".format(dir.parent_inode, dir.name, dir.inode))
+                error = 2
+            elif dir.inode not in allocated_list:
+                print("DIRECTORY INODE {0} NAME {1} UNALLOCATED INODE {2}".format(dir.parent_inode, dir.name, dir.inode))
+                error = 2
+    return error
+
+def checkDirectoryParents(directories, inodes):
+    error = 0
+    for ins in directories:
+        for dir in directories[ins]:
+            if dir.name == '\'.\'':
+                if dir.inode != dir.parent_inode:
+                    print("DIRECTORY INODE {0} NAME '.' LINK TO INODE {1} SHOULD BE {0}".format(dir.inode, dir.parent_inode))
+                    error = 2
+    error += recDirectoryCheck(directories, ext2_root_ino, 2)
+    return error        
+
+def recDirectoryCheck(directories, inodeNum, parentInode):
+    error = 0
+    if inodeNum not in directories:
+        return error
+    for dirEntries in directories[inodeNum]:
+        if dirEntries.name == '\'.\'':
+           continue
+        if dirEntries.name == '\'..\'':
+            if dirEntries.inode != parentInode:
+                print("DIRECTORY INODE {0} NAME '..' LINK TO INODE {1} SHOULD BE {0}".format(parentInode, dirEntries.inode))
+                return 2
+            return 0
+        error += recDirectoryCheck(directories, dirEntries.inode, inodeNum)
+    return error
 
 if(__name__ == '__main__'):
     main()
