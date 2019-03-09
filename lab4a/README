@@ -1,0 +1,31 @@
+NAME: Robert Geil
+EMAIL: rgeil@ucla.edu
+ID: 104916969
+
+Lab 4a: Beaglebone Bring-Up
+
+Included files:
+    - hello.c
+        - A trivial C program to compile and run on the beaglebone
+    - my_beaglebone.jpg
+        - A JPG image file showing a selfie next to the assembled and powered on beaglebone
+    - connected.png
+        - A PNG image showing both the results of ifconfig, and showing network connection, as well
+        as the updated hostname
+    - copy.png
+        - A PNG image showing the use of the scp command to copy hello.c, written on my local machine,
+        to the beaglebone, over wifi connection
+    - build_run.png
+        - A PNG image showing hello.c being compiled with GCC and executed on the beaglebone
+    - git.png
+        - A PNG image showing the installation of git using apt-get, as well as the cloning of a
+        private repository from GitHub, and the ls command to show the contents of the directory afterwards
+    - Makefile
+        - A Makefile with options to build a .tar.gz file to distribute, and to clean and remove that file
+    - README
+        - This file, containing a description of the files contained as well as the serial number and 
+        MAC address of the beaglebone, see below
+
+Beaglebone information:
+    Serial Number: BBGW18031331
+    MAC Address:   2CF7F1067932
