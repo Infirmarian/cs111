@@ -5,7 +5,7 @@
 exe=lab4b
 dist_name=lab4b-104916969.tar.gz
 CC=gcc
-FLAGS=-Wall -Wextra
+FLAGS=-Wall -Wextra -lmraa -lm
 
 
 all: lab4b.c

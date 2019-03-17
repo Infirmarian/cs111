@@ -9,9 +9,30 @@
 #include <string.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <unistd.h>
+#include <math.h>
+
+
+#include "mraa.h"
+
 
 #define celsius 0
 #define fahrenheit 1
+
+// This temperature conversion function is lightly adapted from
+// code appearing at http://wiki.seeedstudio.com/Grove-Temperature_Sensor_V1.2/
+float convert_temperature(int raw_reading, int scale){
+    const int B = 4275;
+    const int R0 = 100000;  
+
+    float R = 1023.0/raw_reading-1.0;
+    R = R0*R;
+    float temp = 1.0/(log(R/R0)/B+1/298.15)-273.15; 
+    
+    if(scale == celsius)
+        return temp;
+    return (temp * 9/5) + 32; // Fahrenheit conversion, if needed
+}
 
 static struct option long_options[] = {
     {"period", required_argument, 0, 'p'},
@@ -84,5 +105,15 @@ int main(int argc, char** argv){
     }else{
         log_fd = STDOUT_FILENO;
     }
+    //Initialize the GPIO switch
+    mraa_aio_context mraa_aio_ptr = mraa_aio_init(1);
+    if(mraa_aio_ptr == 0){
+        fprintf(stderr, "Unable to initialize the Analog Input for the temperature sensor\n");
+        fflush(stdout);
+        exit_status = 2;
+    }
+    int a = mraa_aio_read(mraa_aio_ptr);
+    fprintf(stdout, "Temperature sensor states %f\n", convert_temperature(a, scale));
+
     return exit_status;
 }
