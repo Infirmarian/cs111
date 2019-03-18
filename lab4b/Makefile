@@ -11,8 +11,8 @@ FLAGS=-Wall -Wextra -lmraa -lm
 all: lab4b.c
 	$(CC) $(FLAGS) lab4b.c -o $(exe)
 
-dist: lab4b.c Makefile
-	tar -czf $(dist_name) lab4b.c Makefile
+dist: lab4b.c Makefile README
+	tar -czf $(dist_name) lab4b.c Makefile README
 
 clean:
 	$(RM) $(exe)
