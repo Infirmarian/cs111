@@ -2,3 +2,81 @@ NAME: Robert Geil
 EMAIL: rgeil@ucla.edu
 ID: 104916969
 
+Project 4B - Sensors Input
+
+Included Files:
+    - lab4b.c
+        - A C source file which gathers and logs temperature data from a sensor on an
+        integrated circuit, as well as accepting command-line options
+    - Makefile
+        - A Makefile with options to compile the program (default), make a tar.gz
+        distribution (dist), check sensor communication (check) and clean up (clean)
+    - sensor_check.c
+        - A C source file that runs some basic checks and ensure sensors are available
+        and communication
+    - README
+        - This plain-text file, providing a description of included files and operation
+
+Program Overview:
+    This project intends to create software that is deployable to an integrated circuit,
+    namely a BeagleBone Green Wireless, and used to measure and log temperature every
+    provided time interval. The program relies on the mraa library to communicate with
+    sensors and gather data. In order to compile the program, simply use the "make" command
+    which will produce an executable called lab4b.
+
+Program Execution:
+    The executable lab4b accepts several command-line options, as detailed below:
+        - period=N
+            - Set the time interval between data collection to be N seconds, where N is
+            a positive integer value
+        - scale=S
+            - Set the scale to be S, where S is either F (for fahrenheit) or C (for celsius)
+        - log=filename
+            - Set logged output to go to the specified filename. If the file does not exist,
+            it will be created, and if it already exists, it will simply be appended to
+    
+    During execution, the program continues to read user input from STDIN, and looks for
+    certain commands, as listed below:
+        - SCALE=F
+            - Switch the temperature scale to fahrenheit
+        - SCALE=C
+            - Switch the temperature scale to celsius
+        - PERIOD=seconds
+            - Change the period to the provided seconds. If seconds is not a number,
+            or 0 or negative, period will remain unchanged
+        - STOP
+            - Stops the periodic collection of data, but the program remains running
+        - START
+            - Resumes the collection/logging of data
+        - LOG text to be logged
+            - Writes the line of text to the log file
+        - OFF
+            - Terminates the program, outputting a line with the time and declaring the shutdown
+    
+    In addition, by pressing the button at any point in execution, the shutdown will be
+    initiated, ending the program.
+
+Output:
+    At every time interval, the program will output a line like the following
+        12:32:47 74.2
+    where the first value is the local time of the board or integrated circuit, and
+    the second is the temperature in whatever scale is being used (celcius by default)
+
+Return Value:
+    Return codes are treated as a bit-flag, with the following bit representations
+        0x1 - Bad user input, either in command line or during execution
+        0x2 - Failure to get board reading
+        0x4 - Failed system call
+    The return code is an or-ing of these values, therefore 0 indicates success
+    while non-zero indicates some error
+
+Notes, Features and Limitations:
+    Some source-code, namely the temperature conversion, was copied and slightly
+    modified from http://wiki.seeedstudio.com/Grove-Temperature_Sensor_V1.2/
+    One feature of this program is the ability to take in arbitrarily long input
+    during the program operation. The buffer storing user input can expand when filled,
+    doubling in size each time, meaning that there is no fixed limit outside available
+    system memory for the size of a LOG line for example. One limitation is a lack of
+    a formal testing structure. Because most of the program operation is very interactive,
+    and results are mostly WYSIWYG, I failed to develop automated tests and relied mostly
+    on ad hoc testing of inputs, button presses and other interactions.    

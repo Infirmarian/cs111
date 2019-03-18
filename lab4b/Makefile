@@ -5,15 +5,20 @@
 exe=lab4b
 dist_name=lab4b-104916969.tar.gz
 CC=gcc
-FLAGS=-Wall -Wextra -lmraa -lm
+FLAGS=-Wall -Wextra -lmraa
 
 
 all: lab4b.c
-	$(CC) $(FLAGS) lab4b.c -o $(exe)
+	$(CC) $(FLAGS) -lm lab4b.c -o $(exe)
 
-dist: lab4b.c Makefile README
-	tar -czf $(dist_name) lab4b.c Makefile README
+check: sensor_check.c
+	$(CC) $(FLAGS) sensor_check.c -o sensor
+	./sensor
+
+dist: lab4b.c Makefile README sensor_check.c
+	tar -czf $(dist_name) lab4b.c Makefile README sensor_check.c
 
 clean:
 	$(RM) $(exe)
 	$(RM) $(dist_name)
+	$(RM) sensor

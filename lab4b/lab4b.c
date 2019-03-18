@@ -18,7 +18,7 @@
 
 #define celsius 0
 #define fahrenheit 1
-#define POLL_INTERVAL 1000
+#define POLL_INTERVAL 100
 // This temperature conversion function is lightly adapted from
 // code appearing at http://wiki.seeedstudio.com/Grove-Temperature_Sensor_V1.2/
 float convert_temperature(int raw_reading, int scale){
@@ -45,6 +45,17 @@ char* shutdown_message(char* buf){
     struct tm* timestruct = localtime(&raw_time);
     sprintf(buf, "%02d:%02d:%02d SHUTDOWN\n", timestruct->tm_hour, timestruct->tm_min, timestruct->tm_sec);
     return buf;
+}
+int Write(int fd, char* buf, int nbytes){
+    int res = write(fd, buf, nbytes);
+    if(res == -1){
+        fprintf(stderr, "Unable to write bytes out to buffer: %s\n", strerror(errno));
+        if(fflush(stderr)){
+            fprintf(stderr, "Unable to flush stderr: %s\n", strerror(errno));
+        }
+        return 4;
+    }
+    return 0;
 }
 
 static struct option long_options[] = {
@@ -103,7 +114,7 @@ int main(int argc, char** argv){
                 break;
             default:
                 fprintf(stderr, "Unrecognized argument");
-                exit_status = 1;
+                exit(1);
                 break;
         }
     }
@@ -112,8 +123,7 @@ int main(int argc, char** argv){
         log_fd = open(out_file_name, O_WRONLY | O_APPEND | O_CREAT);
         if(log_fd == -1){
             fprintf(stderr, "Unable to open the stated log file: %s", strerror(errno));
-            exit_status = 2;
-            log_fd = STDOUT_FILENO;
+            exit_status = exit_status | 4;
         }
     }
     //Initialize the GPIO switch
@@ -121,13 +131,13 @@ int main(int argc, char** argv){
     if(mraa_aio_ptr == 0){
         fprintf(stderr, "Unable to initialize the Analog Input for the temperature sensor\n");
         fflush(stdout);
-        exit_status = 2;
+        exit_status = exit_status | 2;
     }
     mraa_gpio_context mraa_gpio_ptr = mraa_gpio_init(60);
     if(mraa_gpio_ptr == 0){
         fprintf(stderr, "Unable to initialize the Digital Button Input\n");
         fflush(stderr);
-        exit_status=2;
+        exit_status=exit_status | 2;
     }
     mraa_gpio_dir(mraa_gpio_ptr, MRAA_GPIO_IN); // set button to take input
 
@@ -140,19 +150,43 @@ int main(int argc, char** argv){
     int raw_temp;
     char buf[30];
     char nextchar;
-    char* input_buf = malloc(sizeof(char)* 100);
-    int input_buf_size = 100;
+    char* input_buf = malloc(sizeof(char)* 200);
+    if(input_buf == 0){
+        fprintf(stderr, "Unable to allocate space for user commands: %s", strerror(errno));
+        fflush(stderr);
+    }
+    int input_buf_size = 200;
     int input_buf_pos = 0;
     int reporting = 1;
+    int button_pressed = 0;
     while(1){
+        // Check for button value
+        button_pressed = mraa_gpio_read(mraa_gpio_ptr);
+        if(button_pressed == -1){
+            exit_status = exit_status | 2;
+            fprintf(stderr, "Unable to read button state\n");
+        }
+        if(button_pressed == 1){
+            char sd_buf[30];
+            shutdown_message(sd_buf); // generate message
+            exit_status = exit_status | Write(STDOUT_FILENO, sd_buf, strlen(sd_buf));
+            if(log_fd != -1)
+                exit_status = exit_status | Write(log_fd, sd_buf, strlen(sd_buf));
+            break;
+        }
         if(time(0) >= next_output_time && reporting){
             next_output_time = time(0) + period;
             //Produce report
             raw_temp = mraa_aio_read(mraa_aio_ptr);
-            next_output(buf, convert_temperature(raw_temp, scale));
-            write(STDOUT_FILENO, buf, strlen(buf));
-            if(log_fd != -1){
-                write(log_fd, buf, strlen(buf));
+            if(raw_temp == -1){
+                fprintf(stderr, "Unable to read temperature\n");
+                exit_status = exit_status | 2;
+            }else{
+                next_output(buf, convert_temperature(raw_temp, scale));
+                exit_status = exit_status | Write(STDOUT_FILENO, buf, strlen(buf));
+                if(log_fd != -1){
+                    exit_status = exit_status | Write(log_fd, buf, strlen(buf));
+                }
             }
         }
         poll(&pfd, 1, POLL_INTERVAL);
@@ -161,11 +195,14 @@ int main(int argc, char** argv){
             read(STDIN_FILENO, &nextchar, 1);
             if(nextchar == '\n'){
                 //Process command
+                int valid_command=0;
                 if(strncmp("SCALE=F", input_buf, input_buf_pos) == 0){
                     scale = fahrenheit;
+                    valid_command = 1;
                 }
                 if(strncmp("SCALE=C", input_buf, input_buf_pos) == 0){
                     scale = celsius;
+                    valid_command = 1;
                 }
                 if(strncmp("PERIOD=", input_buf, 7) == 0){
                     if(input_buf_pos == input_buf_size) // this is an impossibly large number...
@@ -176,34 +213,38 @@ int main(int argc, char** argv){
                     if(newperiod > 0){
                         period = newperiod;
                     }
+                    valid_command = 1;
                 }
                 if(strncmp("START", input_buf, input_buf_pos) == 0){
                     reporting = 1;
+                    valid_command = 1;
                 }
                 if(strncmp("STOP", input_buf, input_buf_pos) == 0){
                     reporting = 0;
+                    valid_command = 1;
                 }
                 if(strncmp("LOG ", input_buf, 4) == 0){
-                    write(STDOUT_FILENO, input_buf, input_buf_pos);
-                    write(STDOUT_FILENO, "\n", 1);
+                    valid_command = 1;
                 }
                 if(strncmp("OFF", input_buf, input_buf_pos) == 0){
                     char sd_buf[30];
                     shutdown_message(sd_buf);
-                    write(STDOUT_FILENO, sd_buf, strlen(sd_buf));
+                    exit_status = exit_status | Write(STDOUT_FILENO, sd_buf, strlen(sd_buf));
                     if(log_fd != -1){
-                        write(log_fd, input_buf, input_buf_pos);
-                        write(log_fd, "\n", 1);
-                    }
-                    if(log_fd != -1){
-                        write(log_fd, sd_buf, strlen(sd_buf));
+                        exit_status = exit_status | Write(log_fd, input_buf, input_buf_pos);
+                        exit_status = exit_status | Write(log_fd, "\n", 1);
+                        exit_status = exit_status | Write(log_fd, sd_buf, strlen(sd_buf));
                     }
                     break;
                 }
                 // Log the command, if logging in enabled
                 if(log_fd != -1){
-                    write(log_fd, input_buf, input_buf_pos);
-                    write(log_fd, "\n", 1);
+                    exit_status = exit_status | Write(log_fd, input_buf, input_buf_pos);
+                    exit_status = exit_status | Write(log_fd, "\n", 1);
+                }
+                if(! valid_command){
+                    fprintf(stderr, "Invalid command received\n");
+                    exit_status = exit_status | 1;
                 }
                 input_buf_pos = 0;
             }else{
@@ -212,7 +253,7 @@ int main(int argc, char** argv){
                     input_buf = realloc(input_buf, input_buf_size*2);
                     if(input_buf == 0){
                         fprintf(stderr, "Unable to allocate more memory: %s\n", strerror(errno));
-                        exit_status = 2;
+                        exit_status = exit_status | 4;
                         break;
                     }
                     input_buf_size *= 2;
