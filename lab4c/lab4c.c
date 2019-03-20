@@ -17,6 +17,7 @@
 #include <netdb.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 
 #include "mraa.h"
 
@@ -24,6 +25,8 @@
 #define celsius 0
 #define fahrenheit 1
 #define POLL_INTERVAL 100
+
+
 // This temperature conversion function is lightly adapted from
 // code appearing at http://wiki.seeedstudio.com/Grove-Temperature_Sensor_V1.2/
 float convert_temperature(int raw_reading, int scale){
@@ -62,6 +65,8 @@ int Write(int fd, char* buf, int nbytes){
     }
     return 0;
 }
+int setup_tcp(char* hostname, char* port);
+int setup_tls(int fd, SSL** ssl);
 
 static struct option long_options[] = {
     {"period", required_argument, 0, 'p'},
@@ -163,43 +168,23 @@ int main(int argc, char** argv){
             exit_status = 1;
         }
     }
-
+    int socket_fd = 0;
+    socket_fd = setup_tcp(hostname, port);
     //Initialize Networking
-    // This code was sourced from https://manpages.debian.org/jessie/manpages-dev/getaddrinfo.3.en.html
-    // and lightly modified
-    struct addrinfo hints;
-    struct addrinfo *result, *rp;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;   
-    hints.ai_socktype = SOCK_STREAM;     
+    #if defined(TLS)
+    SSL* ssl = 0;
+    exit_status = setup_tls(socket_fd, &ssl) ? 2 : exit_status;
+    #endif 
 
-    if (getaddrinfo(hostname, port, &hints, &result)) {
-        fprintf(stderr, "Failed to get address info\n");
-        exit(2);
-    }
-
-    /* getaddrinfo() returns a list of address structures.
-       Try each address until we successfully connect(2).
-       If socket(2) (or connect(2)) fails, we (close the socket
-       and) try the next address. */
-    int socket_fd;
-    for (rp = result; rp != NULL; rp = rp->ai_next) {
-        socket_fd = socket(rp->ai_family, rp->ai_socktype,
-                     rp->ai_protocol);
-        if (socket_fd == -1)
-            continue;
-
-        if (connect(socket_fd, rp->ai_addr, rp->ai_addrlen) != -1)
-            break;                  /* Success */
-        close(socket_fd);
-    }
-    // Free the memory of the address information, as its not needed anymore
-    freeaddrinfo(result);
     // Write to the server the ID=value
     char id_buffer[15];
     sprintf(id_buffer, "ID=%d\n", id);
+    exit_status = Write(log_fd, id_buffer, strlen(id_buffer)) ? 2 : exit_status;
+    #if defined(TLS)
+    SSL_write(ssl, id_buffer, strlen(id_buffer));
+    #else
     write(socket_fd, id_buffer, strlen(id_buffer));
-
+    #endif
 
     //Initialize the GPIO switch
     mraa_aio_context mraa_aio_ptr = mraa_aio_init(1);
@@ -236,7 +221,11 @@ int main(int argc, char** argv){
                 exit_status = 2;
             }else{
                 next_output(buf, convert_temperature(raw_temp, scale));
+                #if defined(TLS)
+                exit_status = SSL_write(ssl, buf, strlen(buf)) <= 0 ? 2: exit_status;
+                #else
                 exit_status = Write(socket_fd, buf, strlen(buf)) ? 2 : exit_status;
+                #endif
                 if(log_fd != -1){
                     exit_status = Write(log_fd, buf, strlen(buf)) ? 2 : exit_status;
                 }
@@ -245,7 +234,11 @@ int main(int argc, char** argv){
         poll(&pfd, 1, POLL_INTERVAL);
         // read and deal with input, if available
         if(pfd.revents & POLLIN){
+            #if defined(TLS)
+            SSL_read(ssl, &nextchar, 1);
+            #else
             read(socket_fd, &nextchar, 1);
+            #endif
             if(nextchar == '\n'){
                 //Process command
                 int valid_command=0;
@@ -282,7 +275,11 @@ int main(int argc, char** argv){
                 if(strncmp("OFF", input_buf, input_buf_pos) == 0){
                     char sd_buf[30];
                     shutdown_message(sd_buf);
-                    exit_status = Write(socket_fd, sd_buf, strlen(sd_buf)) ? 2 : exit_status;
+                    #if defined(TLS)
+                        SSL_write(ssl, sd_buf, strlen(sd_buf));
+                    #else
+                        exit_status = Write(socket_fd, sd_buf, strlen(sd_buf)) ? 2 : exit_status;
+                    #endif
                     if(log_fd != -1){
                         exit_status = Write(log_fd, input_buf, input_buf_pos) ? 2 : exit_status;
                         exit_status = Write(log_fd, "\n", 1) ? 2 : exit_status;
@@ -321,5 +318,74 @@ int main(int argc, char** argv){
     if(log_fd != -1){
         close(log_fd);
     }
+    close(socket_fd);
+    #if defined(TLS)
+        SSL_shutdown(ssl);
+        SSL_free(ssl);
+    #endif
+
     return exit_status;
 }
+int setup_tls(int fd, SSL** ssl){
+    SSL_library_init();
+    OpenSSL_add_all_algorithms();
+    SSL_load_error_strings();
+
+    SSL_CTX* ctx = 0;
+    SSL* data = 0;
+    int error = 0;
+    const SSL_METHOD* method = SSLv23_method();
+    ctx = SSL_CTX_new(method);
+    if(!ctx){
+        fprintf(stderr, "Unable to create SSL_CTX Object\n");
+        error = 2;
+    }
+    data = SSL_new(ctx);
+    int x = SSL_set_fd(data, fd);
+    if(x == 0){
+        fprintf(stderr, "Unable to link the SSL structure to the socket fd\n");
+        error = 2;
+    }
+    x = SSL_connect(data);
+    if(x <= 0){
+        fprintf(stderr, "Unable to connect to SSL\n");
+        error = 2;
+    }
+    *ssl = data;
+    return error;
+}
+
+int setup_tcp(char* hostname, char* port){
+    // This code was sourced from https://manpages.debian.org/jessie/manpages-dev/getaddrinfo.3.en.html
+    // and lightly modified
+    struct addrinfo hints;
+    struct addrinfo *result, *rp;
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_UNSPEC;   
+    hints.ai_socktype = SOCK_STREAM;     
+
+    if (getaddrinfo(hostname, port, &hints, &result)) {
+        fprintf(stderr, "Failed to get address info\n");
+        exit(2);
+    }
+
+    /* getaddrinfo() returns a list of address structures.
+       Try each address until we successfully connect(2).
+       If socket(2) (or connect(2)) fails, we (close the socket
+       and) try the next address. */
+    int socket_fd;
+    for (rp = result; rp != NULL; rp = rp->ai_next) {
+        socket_fd = socket(rp->ai_family, rp->ai_socktype,
+                     rp->ai_protocol);
+        if (socket_fd == -1)
+            continue;
+
+        if (connect(socket_fd, rp->ai_addr, rp->ai_addrlen) != -1)
+            break;                  /* Success */
+        close(socket_fd);
+    }
+    // Free the memory of the address information, as its not needed anymore
+    freeaddrinfo(result);
+    return socket_fd;
+}
+
