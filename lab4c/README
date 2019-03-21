@@ -2,3 +2,80 @@ NAME: Robert Geil
 EMAIL: rgeil@ucla.edu
 ID: 104916969
 
+Lab 4c - Internet of Things Security
+
+Included Files:
+    - lab4c.c
+        - C source file to read from a temperature sensor and report and communicate
+        with a server over TCP and TLS
+    - Makefile
+        - A Makefile with options to make lab4c_tcp and lab4c_tls, as well as a tar.gz
+        distribution, and clean the working directory
+    - README
+        - This text file containing a description and instructions regarding the program
+
+Program Operation:
+    In order to execute the program, it needs to be deployed to an embedded system, like a
+    BeagleBone, with appropriate sensors that can be accessed through the mraa library, as
+    well as network capacity to send and recieve TCP and TLS connections. To build the programs,
+    simply use the make command, which will produce lab4c_tcp and lab4c_tls. These two programs
+    operate in the same manner, except that lab4c_tls will use secure communication with SSL.
+    Each program takes a number of command line options, as described below
+        - scale=S
+            - Set the temperature scale to S, with C corresponding to Celsius and F to Fahrenheit
+        - period=N
+            - Set the period to be N seconds. If N is not a positive number, N defaults to 1
+    The following command line options are required for program operation
+        - log=filename
+            - Set the file to keep track of the log
+        - host=hostname
+            - Set the remote server to communicate with. This is an IP address or a web address
+        - id=N
+            - Set the ID to communicate with the server, this must be a 9 digit number
+        - port number
+            - This is the port to communicate with the server on. Note this is just an argument, no
+            optional --name before it
+    
+    Once starting the program, it will establish a connection with the server (secured or non-secure,
+    depending on which program is run). It will then wait for a START signal from the server, at which
+    point it will begin collecting temperature data and relaying it back to the server, all
+    while waiting for more commands. Commands that can be sent via the server are as follows
+        - SCALE=F
+            - Switch the temperature scale to fahrenheit
+        - SCALE=C
+            - Switch the temperature scale to celsius
+        - PERIOD=seconds
+            - Change the period to the provided seconds. If seconds is not a number,
+            or 0 or negative, period will remain unchanged
+        - STOP
+            - Stops the periodic collection of data, but the program remains running
+        - START
+            - Resumes the collection/logging of data
+        - LOG text to be logged
+            - Writes the line of text to the log file
+        - OFF
+            - Terminates the program, outputting a line with the time and declaring the shutdown
+
+Return Codes:
+    0 - Successful program execution
+    1 - Bad arguments provided
+    2 - Failed system call or communication error
+
+Limitations and Features:
+    One major feature of this program is how the two seperate programs, tcp and tls, are created.
+    Because there are large similarities between the program execution, it didn't make sense to duplicate
+    code. Therefore I utilized the preprocessor to execute certain code segments only when a preprocessor
+    variable TLS was defined. I then defined this variable with gcc before compile time, thereby creating
+    two seperate programs with only 1 source file. One major limitation of this program is within the TLS
+    portion. While the TLS portion works and can communicate with the server, there is some issue I was unable
+    to solve regarding the either loss or reordering of messages. When run with the lever.cs.ucla.edu server,
+    the number of messages recieved by the server is much lower than those that should have been received, and
+    all messages are logged locally. I was unable to find out what caused this issue, given the time constraints.
+
+Notes:
+    The address-resolving code in the main sourcefile was heavily referenced from the example at
+    https://manpages.debian.org/jessie/manpages-dev/getaddrinfo.3.en.html. The temperature conversion code
+    was found at http://wiki.seeedstudio.com/Grove-Temperature_Sensor_V1.2/ and slightly modified, and a 
+    demonstration of how to get command line args not referenced with -- was found at 
+    https://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html#Example-of-Getopt
+
